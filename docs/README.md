@@ -6,7 +6,7 @@
 - Project name: Dependency License Drift
 - Project slug: `dependency-license-drift`
 - Category: Intelligent Contracts
-- Status: `DESIGN`
+- Status: `IMPLEMENTATION - LOCAL CORE`
 - Repository: local scaffold only
 - Target network: `testnet-bradbury`
 
@@ -218,4 +218,3 @@ No legal advice; npm-only v1; SPDX expressions outside the supported grammar are
 ## Kill Criteria
 
 Kill or redesign if the verdict becomes deterministic string matching, if actor-hosted evidence can move funds, if the semantic validator checks only JSON shape, if npm/SPDX access fails on Bradbury without a retryable path, or if the design collapses into a generic license-dispute contract.
-
