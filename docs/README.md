@@ -6,7 +6,7 @@
 - Project name: Dependency License Drift
 - Project slug: `dependency-license-drift`
 - Category: Intelligent Contracts
-- Status: `IMPLEMENTATION - LOCAL CORE`
+- Status: `IMPLEMENTATION - LOCAL LIFECYCLE`
 - Repository: local scaffold only
 - Target network: `testnet-bradbury`
 

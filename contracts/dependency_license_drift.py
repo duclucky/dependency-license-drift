@@ -39,6 +39,15 @@ OBLIGATION_PATENT_RETALIATION = "PATENT_RETALIATION"
 OBLIGATION_COMMERCIAL_RESTRICTION = "COMMERCIAL_RESTRICTION"
 
 
+@gl.evm.contract_interface
+class Recipient:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
 @allow_storage
 @dataclass
 class Covenant:
@@ -358,6 +367,17 @@ class DependencyLicenseDrift(gl.Contract):
             return
 
         raise gl.vm.UserError("unknown consequence")
+
+    @gl.public.write
+    def withdraw_credit(self) -> None:
+        sender = gl.message.sender_address
+        key = self._addr_key(sender)
+        if key not in self.credits or int(self.credits[key]) == 0:
+            raise gl.vm.UserError("no credit")
+        amount = self.credits[key]
+        self.credits[key] = bigint(0)
+        self.total_credits = bigint(int(self.total_credits) - int(amount))
+        Recipient(sender).emit_transfer(value=u256(amount))
 
     def _require_id(self, value: str, name: str) -> None:
         if value == "" or len(value) > MAX_ID_LEN:
