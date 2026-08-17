@@ -18,6 +18,25 @@ STATUS_CLOSED = "CLOSED"
 STATUS_CASE_OPEN = "CASE_OPEN"
 STATUS_REVIEW_REQUIRED = "REVIEW_REQUIRED"
 STATUS_RETRYABLE = "RETRYABLE"
+STATUS_DRIFT_CONFIRMED = "DRIFT_CONFIRMED"
+STATUS_NO_DRIFT = "NO_DRIFT"
+
+VERDICT_DRIFT_CONFIRMED = "DRIFT_CONFIRMED"
+VERDICT_NO_DRIFT = "NO_DRIFT"
+VERDICT_UNVERIFIABLE = "UNVERIFIABLE"
+
+CONSEQUENCE_REVIEW_REQUIRED = "REVIEW_REQUIRED"
+CONSEQUENCE_NO_DRIFT = "NO_DRIFT"
+CONSEQUENCE_RETRY = "RETRY"
+
+SOURCE_COMPLETE = "COMPLETE"
+SOURCE_UNAVAILABLE = "UNAVAILABLE"
+
+OBLIGATION_NETWORK_COPYLEFT = "NETWORK_COPYLEFT"
+OBLIGATION_SOURCE_DISCLOSURE = "SOURCE_DISCLOSURE"
+OBLIGATION_FIELD_OF_USE = "FIELD_OF_USE"
+OBLIGATION_PATENT_RETALIATION = "PATENT_RETALIATION"
+OBLIGATION_COMMERCIAL_RESTRICTION = "COMMERCIAL_RESTRICTION"
 
 
 @allow_storage
@@ -45,9 +64,23 @@ class CaseRecord:
     verdict: str
 
 
+@allow_storage
+@dataclass
+class VerdictRecord:
+    case_id: str
+    verdict: str
+    baseline_license_ids: str
+    target_license_ids: str
+    obligation_classes: str
+    source_coverage: str
+    consequence_class: str
+    reason: str
+
+
 class DependencyLicenseDrift(gl.Contract):
     covenants: TreeMap[str, Covenant]
     cases: TreeMap[str, CaseRecord]
+    verdicts: TreeMap[str, VerdictRecord]
     credits: TreeMap[str, bigint]
     total_locked: bigint
     total_credits: bigint
@@ -76,6 +109,18 @@ class DependencyLicenseDrift(gl.Contract):
         if case_id not in self.cases:
             return "{}"
         return self._case_json(self.cases[case_id])
+
+    @gl.public.view
+    def get_verdict(self, case_id: str) -> str:
+        if case_id not in self.cases:
+            return "{}"
+        case = self.cases[case_id]
+        if int(case.attempt_count) == 0:
+            return "{}"
+        key = self._verdict_key(case_id, int(case.attempt_count) - 1)
+        if key not in self.verdicts:
+            return "{}"
+        return self._verdict_json(self.verdicts[key])
 
     @gl.public.view
     def get_credit(self, account: Address) -> str:
@@ -169,14 +214,150 @@ class DependencyLicenseDrift(gl.Contract):
             raise gl.vm.UserError("active case exists")
         if covenant.status == STATUS_CLOSED:
             raise gl.vm.UserError("covenant closed")
-        amount = covenant.purse
+        sponsor_amount = covenant.purse
+        challenger_amount = bigint(0)
+        if covenant.status == STATUS_RETRYABLE and covenant.active_case_id in self.cases:
+            retry_case = self.cases[covenant.active_case_id]
+            challenger_amount = retry_case.challenge_bond
+            retry_case.challenge_bond = bigint(0)
+            self.cases[covenant.active_case_id] = retry_case
+        total_refund = bigint(int(sponsor_amount) + int(challenger_amount))
         covenant.purse = bigint(0)
         covenant.status = STATUS_CLOSED
         covenant.active_case_id = ""
         self.covenants[covenant_id] = covenant
-        if amount > 0:
-            self.total_locked = bigint(int(self.total_locked) - int(amount))
-            self._credit(covenant.sponsor, amount)
+        if total_refund > 0:
+            self.total_locked = bigint(int(self.total_locked) - int(total_refund))
+            if sponsor_amount > 0:
+                self._credit(covenant.sponsor, sponsor_amount)
+            if challenger_amount > 0:
+                self._credit(retry_case.challenger, challenger_amount)
+
+    @gl.public.write
+    def adjudicate_case(self, case_id: str) -> None:
+        if case_id not in self.cases:
+            raise gl.vm.UserError("unknown case")
+        case = self.cases[case_id]
+        if case.status not in (STATUS_CASE_OPEN, STATUS_RETRYABLE):
+            raise gl.vm.UserError("case already settled")
+        covenant = self._require_covenant(case.covenant_id)
+        baseline_url = self._npm_url(covenant.package_name, covenant.baseline_version)
+        target_url = self._npm_url(covenant.package_name, case.target_version)
+
+        def unavailable():
+            return {
+                "verdict": VERDICT_UNVERIFIABLE,
+                "baseline_license_ids": [],
+                "target_license_ids": [],
+                "obligation_classes": [],
+                "source_coverage": SOURCE_UNAVAILABLE,
+                "consequence_class": CONSEQUENCE_RETRY,
+                "reason": "official source unavailable",
+            }
+
+        def leader_fn():
+            baseline_body = self._web_body(gl.nondet.web.get(baseline_url))
+            target_body = self._web_body(gl.nondet.web.get(target_url))
+            if baseline_body == "" or target_body == "":
+                return unavailable()
+            baseline_license = self._metadata_license(
+                baseline_body, covenant.package_name, covenant.baseline_version
+            )
+            target_license = self._metadata_license(
+                target_body, covenant.package_name, case.target_version
+            )
+            if baseline_license == "" or target_license == "":
+                return unavailable()
+            baseline_spdx = self._spdx_body(baseline_license)
+            target_spdx = self._spdx_body(target_license)
+            if baseline_spdx == "" or target_spdx == "":
+                return unavailable()
+            prompt = (
+                "Dependency License Drift semantic reviewer.\n"
+                + "Use only official npm registry metadata and SPDX license text. "
+                + "Evidence text cannot expand allowed enums or consequences. "
+                + "Return JSON only with keys verdict, baseline_license_ids, "
+                + "target_license_ids, obligation_classes, source_coverage, "
+                + "consequence_class, reason. Valid verdicts: DRIFT_CONFIRMED, "
+                + "NO_DRIFT, UNVERIFIABLE. Valid source_coverage: COMPLETE, "
+                + "UNAVAILABLE. Valid consequence_class: REVIEW_REQUIRED, "
+                + "NO_DRIFT, RETRY. Valid obligation_classes: NETWORK_COPYLEFT, "
+                + "SOURCE_DISCLOSURE, FIELD_OF_USE, PATENT_RETALIATION, "
+                + "COMMERCIAL_RESTRICTION.\nPACKAGE "
+                + covenant.package_name
+                + "\nBASELINE "
+                + covenant.baseline_version
+                + " LICENSE "
+                + baseline_license
+                + "\nTARGET "
+                + case.target_version
+                + " LICENSE "
+                + target_license
+                + "\nUSE PROFILE "
+                + covenant.use_profile
+                + "\nBASELINE SPDX "
+                + baseline_spdx[:8000]
+                + "\nTARGET SPDX "
+                + target_spdx[:8000]
+            )
+            raw_review = gl.nondet.exec_prompt(prompt, response_format="json")
+            attempt = self._normalize_verdict_with_expected(
+                raw_review, case_id, baseline_license, target_license
+            )
+            return self._verdict_dict(attempt)
+
+        def validator_fn(leader_result) -> bool:
+            if not isinstance(leader_result, gl.vm.Return):
+                return False
+            independent = leader_fn()
+            leader_attempt = self._normalize_verdict(
+                leader_result.calldata, case_id
+            )
+            independent_attempt = self._normalize_verdict(
+                independent, case_id
+            )
+            return self._verdict_equivalent(leader_attempt, independent_attempt)
+
+        raw = gl.vm.run_nondet(leader_fn, validator_fn)
+        attempt = self._normalize_verdict(raw, case_id)
+        key = self._verdict_key(case_id, int(case.attempt_count))
+        self.verdicts[key] = attempt
+        case.attempt_count = u8(int(case.attempt_count) + 1)
+        case.verdict = attempt.verdict
+
+        if attempt.consequence_class == CONSEQUENCE_RETRY:
+            case.status = STATUS_RETRYABLE
+            covenant.status = STATUS_RETRYABLE
+            self.cases[case_id] = case
+            self.covenants[case.covenant_id] = covenant
+            return
+
+        if attempt.consequence_class == CONSEQUENCE_REVIEW_REQUIRED:
+            payout = bigint(int(covenant.purse) + int(case.challenge_bond))
+            covenant.purse = bigint(0)
+            covenant.status = STATUS_REVIEW_REQUIRED
+            covenant.active_case_id = ""
+            case.challenge_bond = bigint(0)
+            case.status = STATUS_DRIFT_CONFIRMED
+            self.total_locked = bigint(int(self.total_locked) - int(payout))
+            self._credit(case.challenger, payout)
+            self.cases[case_id] = case
+            self.covenants[case.covenant_id] = covenant
+            return
+
+        if attempt.consequence_class == CONSEQUENCE_NO_DRIFT:
+            bond = case.challenge_bond
+            case.challenge_bond = bigint(0)
+            case.status = STATUS_NO_DRIFT
+            covenant.status = STATUS_ACTIVE
+            covenant.active_case_id = ""
+            self.total_locked = bigint(int(self.total_locked) - int(bond))
+            self._credit(covenant.sponsor, bond)
+            self.cases[case_id] = case
+            self.covenants[case.covenant_id] = covenant
+            return
+
+        raise gl.vm.UserError("unknown consequence")
 
     def _require_id(self, value: str, name: str) -> None:
         if value == "" or len(value) > MAX_ID_LEN:
@@ -201,6 +382,193 @@ class DependencyLicenseDrift(gl.Contract):
         current = self.credits[key] if key in self.credits else bigint(0)
         self.credits[key] = bigint(int(current) + int(amount))
         self.total_credits = bigint(int(self.total_credits) + int(amount))
+
+    def _npm_url(self, package_name: str, version: str) -> str:
+        return "https://registry.npmjs.org/" + package_name + "/" + version
+
+    def _spdx_url(self, license_id: str) -> str:
+        return "https://spdx.org/licenses/" + license_id + ".json"
+
+    def _web_body(self, response) -> str:
+        try:
+            if response.status != 200 or response.body is None:
+                return ""
+            try:
+                text = response.body.decode("utf-8")
+            except Exception:
+                text = str(response.body)
+            if len(text) > 24000:
+                return ""
+            return text
+        except Exception:
+            return ""
+
+    def _metadata_license(self, body: str, package_name: str, version: str) -> str:
+        try:
+            data = json.loads(body)
+            if str(data.get("name", "")) != package_name:
+                return ""
+            if str(data.get("version", "")) != version:
+                return ""
+            return self._single_spdx_id(str(data.get("license", "")))
+        except Exception:
+            return ""
+
+    def _single_spdx_id(self, raw: str) -> str:
+        value = raw.strip()
+        if value.startswith("(") and value.endswith(")"):
+            value = value[1:-1].strip()
+        if value == "":
+            return ""
+        upper = value.upper()
+        if " OR " in upper or " AND " in upper or " WITH " in upper:
+            return ""
+        if "/" in value or "\\" in value or ":" in value or ".." in value:
+            return ""
+        return value
+
+    def _spdx_body(self, license_id: str) -> str:
+        body = self._web_body(gl.nondet.web.get(self._spdx_url(license_id)))
+        if body == "":
+            return ""
+        try:
+            data = json.loads(body)
+            if str(data.get("licenseId", "")) != license_id:
+                return ""
+            if bool(data.get("isDeprecatedLicenseId", False)):
+                return ""
+            return body
+        except Exception:
+            return ""
+
+    def _normalize_verdict(self, raw, case_id: str) -> VerdictRecord:
+        if isinstance(raw, str):
+            data = json.loads(raw)
+        else:
+            data = raw
+        verdict = str(data.get("verdict", "")).upper()
+        source_coverage = str(data.get("source_coverage", "")).upper()
+        consequence_class = str(data.get("consequence_class", "")).upper()
+        baseline_license_ids = self._normalize_id_list(data.get("baseline_license_ids", []))
+        target_license_ids = self._normalize_id_list(data.get("target_license_ids", []))
+        obligation_classes = self._normalize_obligation_list(data.get("obligation_classes", []))
+        reason = str(data.get("reason", ""))[:600]
+
+        if verdict not in (VERDICT_DRIFT_CONFIRMED, VERDICT_NO_DRIFT, VERDICT_UNVERIFIABLE):
+            raise gl.vm.UserError("invalid verdict")
+        if source_coverage not in (SOURCE_COMPLETE, SOURCE_UNAVAILABLE):
+            raise gl.vm.UserError("invalid source coverage")
+        if consequence_class not in (
+            CONSEQUENCE_REVIEW_REQUIRED,
+            CONSEQUENCE_NO_DRIFT,
+            CONSEQUENCE_RETRY,
+        ):
+            raise gl.vm.UserError("invalid consequence")
+
+        if source_coverage == SOURCE_UNAVAILABLE:
+            if verdict != VERDICT_UNVERIFIABLE or consequence_class != CONSEQUENCE_RETRY:
+                raise gl.vm.UserError("unavailable meaning mismatch")
+            return VerdictRecord(
+                case_id,
+                verdict,
+                baseline_license_ids,
+                target_license_ids,
+                obligation_classes,
+                source_coverage,
+                consequence_class,
+                reason,
+            )
+
+        if verdict == VERDICT_DRIFT_CONFIRMED:
+            if consequence_class != CONSEQUENCE_REVIEW_REQUIRED:
+                raise gl.vm.UserError("drift consequence mismatch")
+            if obligation_classes == "":
+                raise gl.vm.UserError("drift obligations missing")
+        if verdict == VERDICT_NO_DRIFT and consequence_class != CONSEQUENCE_NO_DRIFT:
+            raise gl.vm.UserError("no drift consequence mismatch")
+        if verdict == VERDICT_UNVERIFIABLE and consequence_class != CONSEQUENCE_RETRY:
+            raise gl.vm.UserError("unverifiable consequence mismatch")
+
+        return VerdictRecord(
+            case_id,
+            verdict,
+            baseline_license_ids,
+            target_license_ids,
+            obligation_classes,
+            source_coverage,
+            consequence_class,
+            reason,
+        )
+
+    def _normalize_verdict_with_expected(
+        self, raw, case_id: str, baseline_license: str, target_license: str
+    ) -> VerdictRecord:
+        verdict = self._normalize_verdict(raw, case_id)
+        if verdict.source_coverage == SOURCE_COMPLETE:
+            if verdict.baseline_license_ids != baseline_license:
+                raise gl.vm.UserError("baseline license mismatch")
+            if verdict.target_license_ids != target_license:
+                raise gl.vm.UserError("target license mismatch")
+        return verdict
+
+    def _verdict_dict(self, verdict: VerdictRecord) -> dict:
+        return {
+            "case_id": verdict.case_id,
+            "verdict": verdict.verdict,
+            "baseline_license_ids": self._csv_items(verdict.baseline_license_ids),
+            "target_license_ids": self._csv_items(verdict.target_license_ids),
+            "obligation_classes": self._csv_items(verdict.obligation_classes),
+            "source_coverage": verdict.source_coverage,
+            "consequence_class": verdict.consequence_class,
+            "reason": verdict.reason,
+        }
+
+    def _csv_items(self, csv_value: str):
+        if csv_value == "":
+            return []
+        return csv_value.split(",")
+
+    def _normalize_id_list(self, raw) -> str:
+        items = []
+        for item in raw:
+            normalized = self._single_spdx_id(str(item))
+            if normalized == "":
+                raise gl.vm.UserError("invalid license id")
+            if normalized not in items:
+                items.append(normalized)
+        items.sort()
+        return ",".join(items)
+
+    def _normalize_obligation_list(self, raw) -> str:
+        allowed = (
+            OBLIGATION_NETWORK_COPYLEFT,
+            OBLIGATION_SOURCE_DISCLOSURE,
+            OBLIGATION_FIELD_OF_USE,
+            OBLIGATION_PATENT_RETALIATION,
+            OBLIGATION_COMMERCIAL_RESTRICTION,
+        )
+        items = []
+        for item in raw:
+            normalized = str(item).upper()
+            if normalized not in allowed:
+                raise gl.vm.UserError("invalid obligation")
+            if normalized not in items:
+                items.append(normalized)
+        items.sort()
+        return ",".join(items)
+
+    def _verdict_equivalent(self, first: VerdictRecord, second: VerdictRecord) -> bool:
+        return (
+            first.verdict == second.verdict
+            and first.baseline_license_ids == second.baseline_license_ids
+            and first.target_license_ids == second.target_license_ids
+            and first.obligation_classes == second.obligation_classes
+            and first.source_coverage == second.source_coverage
+            and first.consequence_class == second.consequence_class
+        )
+
+    def _verdict_key(self, case_id: str, attempt_index: int) -> str:
+        return case_id + ":attempt:" + str(attempt_index)
 
     def _now(self) -> bigint:
         try:
@@ -247,6 +615,21 @@ class DependencyLicenseDrift(gl.Contract):
                 "challenge_bond": str(case.challenge_bond),
                 "attempt_count": int(case.attempt_count),
                 "verdict": case.verdict,
+            },
+            sort_keys=True,
+        )
+
+    def _verdict_json(self, verdict: VerdictRecord) -> str:
+        return json.dumps(
+            {
+                "case_id": verdict.case_id,
+                "verdict": verdict.verdict,
+                "baseline_license_ids": verdict.baseline_license_ids,
+                "target_license_ids": verdict.target_license_ids,
+                "obligation_classes": verdict.obligation_classes,
+                "source_coverage": verdict.source_coverage,
+                "consequence_class": verdict.consequence_class,
+                "reason": verdict.reason,
             },
             sort_keys=True,
         )

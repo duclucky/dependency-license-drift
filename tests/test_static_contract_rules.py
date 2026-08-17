@@ -53,3 +53,13 @@ def test_no_claimant_evidence_settlement_terms() -> None:
     source = CONTRACT.read_text(encoding="utf-8")
     forbidden = ["githubusercontent", "screenshot", "claimant_url", "sha256_only"]
     assert not any(term in source for term in forbidden)
+
+
+def test_adjudication_uses_custom_nondet_validator() -> None:
+    source = CONTRACT.read_text(encoding="utf-8")
+
+    assert "gl.vm.run_nondet(" in source
+    assert "gl.nondet.web.get" in source
+    assert "gl.nondet.exec_prompt" in source
+    assert "isinstance(leader_result, gl.vm.Return)" in source
+    assert "run_nondet_unsafe" not in source
