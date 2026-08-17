@@ -78,6 +78,7 @@ State machine:
 
 ```text
 DRAFT --activate/sponsor+value--> ACTIVE
+ACTIVE --cancel_covenant/sponsor--> CLOSED
 ACTIVE --open_case/challenger+bond--> CASE_OPEN
 CASE_OPEN --adjudicate/anyone--> REVIEW_PENDING -> DRIFT_CONFIRMED | NO_DRIFT | RETRYABLE
 DRIFT_CONFIRMED --withdraw_credit/challenger--> CREDIT_WITHDRAWN
@@ -85,15 +86,16 @@ NO_DRIFT --withdraw_credit/sponsor--> CREDIT_WITHDRAWN
 ACTIVE|RETRYABLE --close_expired/sponsor after expiry--> CLOSED
 ```
 
-Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`now < expiry` is active, equality is expired). `open_case` checks expiry directly. `close_expired` checks sponsor, state, zero active case or retryable state, and `now >= expiry` directly.
+Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`now < expiry` is active, equality is expired). `open_case` checks expiry directly. `close_expired` checks sponsor, state, zero active case or retryable state, and `now >= expiry` directly. `cancel_covenant` is non-temporal sponsor recovery for an `ACTIVE` covenant with no open case.
 
 ## Write-Method Safety Matrix
 
 | Method | Caller | Allowed states | Forbidden states | Temporal/expiry gate | Idempotency | Value/accounting effect | Views affected | Negative tests |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `activate_covenant` | Sponsor | New covenant ID | Existing covenant | `now < expiry`; equality late for activation | Duplicate ID rejects | Locks sponsor purse | `get_covenant`, `get_accounting` | zero value, duplicate, expired, wrong value |
+| `cancel_covenant` | Sponsor | `ACTIVE` with no active case | wrong caller, `CASE_OPEN`, terminal, `CLOSED` | N/A; sponsor recovery is state-gated | Second cancel rejects | Credits sponsor purse and removes locked amount | `get_covenant`, `get_credit`, `get_accounting` | wrong caller, active case, double cancel |
 | `open_case` | Challenger | `ACTIVE` | `CASE_OPEN`, terminal, `CLOSED` | `now < expiry`; stale state after expiry rejects | One active case per covenant | Locks challenge bond | `get_case`, `get_covenant` | wrong state, expired boundary, duplicate, zero bond |
-| `adjudicate_case` | Anyone | `CASE_OPEN`, `RETRYABLE` | terminal, closed | N/A; legality derives from state and source availability | Attempt ID append-only; settled case rejects | Opens credits or keeps locked on retry | `get_verdict`, `get_credit`, `get_status` | malicious leader, missing source, invalid enum, duplicate settle |
+| `adjudicate_case` | Anyone | `CASE_OPEN`, `RETRYABLE` | terminal, closed | N/A; legality derives from state and source availability | Attempt ID append-only; settled case rejects | Opens credits or keeps locked on retry | `get_verdict`, `get_credit`, `get_status` | malicious leader, missing source, noisy LLM consequence, duplicate settle |
 | `withdraw_credit` | Credited address | Credit > 0 | No credit | N/A; credit ownership only | Zeroes before transfer; second call rejects | Transfers native GEN to caller | `get_credit`, `get_accounting` | wrong caller, double withdraw, transfer invariant |
 | `close_expired` | Sponsor | `ACTIVE` with no active case, or `RETRYABLE` | `CASE_OPEN`, terminal settled | `now >= expiry`; equality expired | Second close rejects | Credits remaining locked funds to sponsor | `get_covenant`, `get_credit` | wrong caller, expiry - 1, exact expiry, active case, double close |
 
@@ -101,7 +103,7 @@ Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`n
 
 | Value item | Payer/source | Locked state | Release destination | Refund destination | Forfeit destination | Terminal states covered | Duplicate/late/retry behavior | Canonical proof view |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sponsor purse | Sponsor | `ACTIVE`, `CASE_OPEN`, `RETRYABLE` | Challenger/remediation credit on `DRIFT_CONFIRMED` | Sponsor credit on expiry close | N/A | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Retry keeps locked; duplicate settlement rejects | `get_accounting`, `get_credit` |
+| Sponsor purse | Sponsor | `ACTIVE`, `CASE_OPEN`, `RETRYABLE` | Challenger/remediation credit on `DRIFT_CONFIRMED` | Sponsor credit on active cancel or expiry close | N/A | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Retry keeps locked; duplicate settlement rejects; active cancel rejects with open case | `get_accounting`, `get_credit` |
 | Challenge bond | Challenger | `CASE_OPEN`, `RETRYABLE` | Challenger credit on `DRIFT_CONFIRMED` | Challenger credit on `RETRYABLE` close policy if specified | Sponsor credit on `NO_DRIFT` | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Duplicate settlement rejects; late open rejects | `get_case`, `get_credit` |
 
 ## Evidence Policy
@@ -118,11 +120,11 @@ Fact authentication matrix:
 | --- | --- | --- | --- | --- | --- | --- |
 | Package version license field | Package publisher can set metadata, but registry is authoritative for published version metadata | npm registry | Validator fetch from registry host/version path | Covenant/case binds package and versions | `RETRYABLE` if missing/malformed | claimant JSON with same fields cannot settle |
 | License text and canonical ID | SPDX project controls list | SPDX | Validator fetch exact SPDX JSON | Case binds observed license IDs | `RETRYABLE` if unsupported/deprecated | fake SPDX URL rejected |
-| Drift meaning | No actor may submit final verdict | GenLayer validators | Independent LLM/web replay and semantic validator | Attempt ID append-only | invalid output rejects before mutation | format-valid but meaning-invalid result rejected |
+| Drift meaning | No actor may submit final verdict | GenLayer validators | Independent npm/SPDX replay plus contract-derived bounded obligation classifier; LLM text is non-consequential rationale | Attempt ID append-only | invalid source maps to retryable; noisy LLM cannot alter settlement | format-valid but meaning-invalid LLM output ignored |
 
 ## Consensus Design
 
-Leader task: fetch npm baseline metadata, target metadata, SPDX license JSON/text for both normalized license IDs, then ask LLM to classify drift under the locked use profile.
+Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile; LLM output is retained only as non-consequential rationale so Bradbury validators do not disagree over free-form semantic wording.
 
 Consensus-critical fields:
 
@@ -134,7 +136,7 @@ Consensus-critical fields:
 | `target_license_ids` | bounded SPDX IDs | set equality | Source coverage |
 | `consequence_class` | contract-derived | must match derived class | Prevents LLM-controlled payouts |
 
-Validator: re-fetches official evidence, re-runs semantic task, compares meaning fields only, rejects non-`gl.vm.Return`, invalid enums, incomplete coverage, extra IDs, or inconsistent consequence class.
+Validator: re-fetches official evidence, derives the same bounded meaning fields, compares settlement fields only, and rejects non-`gl.vm.Return`. Extra or inconsistent LLM-provided IDs/classes are ignored because they are not settlement authority.
 
 ## Consequence And Accounting
 
@@ -148,7 +150,7 @@ Accepted/finalized boundary: public claims use finalized Bradbury receipts and c
 
 ## Reusable Interface
 
-Write methods: `activate_covenant`, `open_case`, `adjudicate_case`, `withdraw_credit`, `close_expired`.
+Write methods: `activate_covenant`, `cancel_covenant`, `open_case`, `adjudicate_case`, `withdraw_credit`, `close_expired`.
 
 View methods: `get_covenant`, `get_case`, `get_verdict`, `get_package_status`, `get_credit`, `get_accounting`.
 
@@ -159,7 +161,7 @@ Consumer/callback: none in v1; other builders consume views.
 | Threat | Attack | Mitigation | Test |
 | --- | --- | --- | --- |
 | Claimant-hosted fake evidence | Challenger submits JSON proving drift | Contract ignores claimant URLs; fetches only registry/SPDX | fake JSON cannot settle |
-| Format-valid malicious leader | Leader returns valid JSON but mismatched IDs | Settlement invariants compare exact IDs and derived consequence | invalid meaning rejected |
+| Format-valid malicious leader | Leader returns valid JSON but mismatched IDs | Settlement uses official npm/SPDX IDs and contract-derived consequence, not LLM-provided IDs | noisy LLM ignored |
 | Prompt injection in license text | Text says ignore policy | Prompt treats evidence as data; allowed enums only | injection fixture |
 | Late case after expiry | Caller opens case with stale `ACTIVE` state | `open_case` checks timestamp directly | boundary tests |
 | Double withdrawal | Credited caller repeats withdraw | zero credit before transfer | duplicate withdraw test |
@@ -168,7 +170,7 @@ Consumer/callback: none in v1; other builders consume views.
 
 Happy path: MIT baseline to AGPL target opens `REVIEW_REQUIRED` and challenger credit.
 
-Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, no active case double settlement, fake source, unsupported license expression, missing SPDX, malicious output, prompt injection, accounting unchanged on rejection, no double withdraw, retryable source failure.
+Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, active cancel recovery, no active case double settlement, fake source, unsupported license expression, missing SPDX, noisy LLM output, prompt injection, accounting unchanged on rejection, no double withdraw, retryable source failure.
 
 ## Claim-To-Code Matrix
 
@@ -176,6 +178,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 | --- | --- | --- | --- | --- |
 | Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | Bradbury finalized adjudication |
 | Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | Bradbury canonical read |
+| Sponsor can recover idle active covenant | `cancel_covenant` | `get_credit`, `get_accounting` | active cancel recovery and guards | Bradbury recovery if used |
 | No claimant-hosted evidence can settle | source allowlist guard | `get_case` | fake JSON rejected | local test; no network claim needed |
 | Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | Bradbury withdraw receipt |
 | Expiry is entrypoint-enforced | `open_case`, `close_expired` | `get_covenant` | deadline -1, =, +1 stale-state tests | Bradbury expiry recovery if used |
@@ -199,7 +202,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 - Actors/wallet separation: sponsor and challenger EOAs if value lifecycle needs adversarial separation.
 - Deploy steps: local check, safe config discovery, faucet/balance check, CLI or script deploy with `testnet-bradbury`, schema read, lifecycle txs, finalized receipts, canonical reads.
 - Evidence path: `docs/evidence/bradbury/`
-- Resume/idempotency: active deployment identity binds network, source commit, contract header/API family, address, txs, and lifecycle IDs.
+- Resume/idempotency: active deployment identity binds network, source commit, contract header/API family, address, txs, and lifecycle IDs. The Bradbury lifecycle script writes sanitized IDs and submitted tx hashes before waiting for acceptance so interrupted runs can be recovered.
 
 ## Definition Of Done
 

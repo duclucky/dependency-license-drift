@@ -104,7 +104,31 @@ def test_mit_to_agpl_confirms_drift(direct_vm, direct_deploy, direct_alice, dire
     assert int(accounting["total_locked"]) == 0
 
 
-def test_invalid_llm_verdict_reverts_without_accounting_change(
+def test_bounded_spdx_drift_does_not_trust_llm_consequence(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = _activate_and_open(direct_vm, direct_deploy, direct_alice, direct_bob)
+    noisy = drift_result()
+    noisy["verdict"] = "NO_DRIFT"
+    noisy["obligation_classes"] = []
+    noisy["consequence_class"] = "NO_DRIFT"
+    noisy["reason"] = "The model minimized the license change."
+    _mock_mit_to_agpl(direct_vm, noisy)
+
+    contract.adjudicate_case("case-1")
+
+    verdict = json.loads(contract.get_verdict("case-1"))
+    case = json.loads(contract.get_case("case-1"))
+    challenger_credit = json.loads(contract.get_credit(direct_bob))
+
+    assert verdict["verdict"] == "DRIFT_CONFIRMED"
+    assert verdict["obligation_classes"] == "NETWORK_COPYLEFT,SOURCE_DISCLOSURE"
+    assert verdict["consequence_class"] == "REVIEW_REQUIRED"
+    assert case["status"] == "DRIFT_CONFIRMED"
+    assert int(challenger_credit["credit"]) == 3 * GEN
+
+
+def test_invalid_llm_verdict_is_ignored_by_bounded_classifier(
     direct_vm, direct_deploy, direct_alice, direct_bob
 ):
     contract = _activate_and_open(direct_vm, direct_deploy, direct_alice, direct_bob)
@@ -112,15 +136,17 @@ def test_invalid_llm_verdict_reverts_without_accounting_change(
     bad["verdict"] = "PAY_CHALLENGER"
     _mock_mit_to_agpl(direct_vm, bad)
 
-    before = json.loads(contract.get_accounting())
-    with direct_vm.expect_revert("invalid verdict"):
-        contract.adjudicate_case("case-1")
+    contract.adjudicate_case("case-1")
 
-    assert json.loads(contract.get_accounting()) == before
-    assert contract.get_package_status("cov-1") == "CASE_OPEN"
+    verdict = json.loads(contract.get_verdict("case-1"))
+    challenger_credit = json.loads(contract.get_credit(direct_bob))
+
+    assert verdict["verdict"] == "DRIFT_CONFIRMED"
+    assert verdict["consequence_class"] == "REVIEW_REQUIRED"
+    assert int(challenger_credit["credit"]) == 3 * GEN
 
 
-def test_extra_llm_license_id_reverts_without_accounting_change(
+def test_extra_llm_license_id_is_ignored_by_bounded_classifier(
     direct_vm, direct_deploy, direct_alice, direct_bob
 ):
     contract = _activate_and_open(direct_vm, direct_deploy, direct_alice, direct_bob)
@@ -128,11 +154,14 @@ def test_extra_llm_license_id_reverts_without_accounting_change(
     bad["target_license_ids"] = ["AGPL-3.0-or-later", "GPL-3.0-only"]
     _mock_mit_to_agpl(direct_vm, bad)
 
-    before = json.loads(contract.get_accounting())
-    with direct_vm.expect_revert("target license mismatch"):
-        contract.adjudicate_case("case-1")
+    contract.adjudicate_case("case-1")
 
-    assert json.loads(contract.get_accounting()) == before
+    verdict = json.loads(contract.get_verdict("case-1"))
+    challenger_credit = json.loads(contract.get_credit(direct_bob))
+
+    assert verdict["target_license_ids"] == "AGPL-3.0-or-later"
+    assert verdict["consequence_class"] == "REVIEW_REQUIRED"
+    assert int(challenger_credit["credit"]) == 3 * GEN
 
 
 def test_unavailable_source_is_retryable_and_non_penalizing(

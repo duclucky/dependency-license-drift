@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseExecutionResult, sanitizeReceipt } from "../scripts/deploy_bradbury.mjs";
+import { parseExecutionResult, parseTextReceiptFields, sanitizeReceipt } from "../scripts/deploy_bradbury.mjs";
 
 test("parseExecutionResult reads raw Studio leader receipt shape", () => {
   const receipt = {
@@ -54,4 +54,19 @@ test("sanitizeReceipt keeps only public allowlisted fields", () => {
   assert.equal("node_config" in safe, false);
   assert.equal("stdout" in safe, false);
   assert.equal("stderr" in safe, false);
+});
+
+test("parseTextReceiptFields reads GenLayer CLI deploy output", () => {
+  const text = `
+Deployment Transaction Hash: 0xabc123
+Deployment Receipt: { data: { contract_address: '0xdef0000000000000000000000000000000000001' } }
+Contract deployed successfully.
+Transaction Hash: 0xabc123
+Contract Address: 0xdef0000000000000000000000000000000000001
+`;
+
+  assert.deepEqual(parseTextReceiptFields(text), {
+    txHash: "0xabc123",
+    contractAddress: "0xdef0000000000000000000000000000000000001",
+  });
 });

@@ -243,6 +243,23 @@ class DependencyLicenseDrift(gl.Contract):
                 self._credit(retry_case.challenger, challenger_amount)
 
     @gl.public.write
+    def cancel_covenant(self, covenant_id: str) -> None:
+        covenant = self._require_covenant(covenant_id)
+        if self._addr_key(gl.message.sender_address) != self._addr_key(covenant.sponsor):
+            raise gl.vm.UserError("unauthorized")
+        if covenant.active_case_id != "":
+            raise gl.vm.UserError("active case exists")
+        if covenant.status != STATUS_ACTIVE:
+            raise gl.vm.UserError("covenant not active")
+        refund = covenant.purse
+        covenant.purse = bigint(0)
+        covenant.status = STATUS_CLOSED
+        self.covenants[covenant_id] = covenant
+        if refund > 0:
+            self.total_locked = bigint(int(self.total_locked) - int(refund))
+            self._credit(covenant.sponsor, refund)
+
+    @gl.public.write
     def adjudicate_case(self, case_id: str) -> None:
         if case_id not in self.cases:
             raise gl.vm.UserError("unknown case")
@@ -310,8 +327,14 @@ class DependencyLicenseDrift(gl.Contract):
                 + target_spdx[:8000]
             )
             raw_review = gl.nondet.exec_prompt(prompt, response_format="json")
-            attempt = self._normalize_verdict_with_expected(
-                raw_review, case_id, baseline_license, target_license
+            attempt = self._derive_bounded_verdict(
+                case_id,
+                baseline_license,
+                target_license,
+                baseline_spdx,
+                target_spdx,
+                covenant.use_profile,
+                raw_review,
             )
             return self._verdict_dict(attempt)
 
@@ -530,6 +553,109 @@ class DependencyLicenseDrift(gl.Contract):
             if verdict.target_license_ids != target_license:
                 raise gl.vm.UserError("target license mismatch")
         return verdict
+
+    def _derive_bounded_verdict(
+        self,
+        case_id: str,
+        baseline_license: str,
+        target_license: str,
+        baseline_spdx: str,
+        target_spdx: str,
+        use_profile: str,
+        raw_review,
+    ) -> VerdictRecord:
+        reason = self._bounded_reason(raw_review)
+        baseline_obligations = self._derive_obligations(baseline_license, baseline_spdx)
+        target_obligations = self._derive_obligations(target_license, target_spdx)
+        new_obligations = []
+        for item in self._csv_items(target_obligations):
+            if item not in self._csv_items(baseline_obligations):
+                new_obligations.append(item)
+        disallowed = []
+        for item in new_obligations:
+            if self._profile_disallows(use_profile, target_license, item):
+                disallowed.append(item)
+        disallowed.sort()
+        if baseline_license != target_license and len(disallowed) > 0:
+            return VerdictRecord(
+                case_id,
+                VERDICT_DRIFT_CONFIRMED,
+                baseline_license,
+                target_license,
+                ",".join(disallowed),
+                SOURCE_COMPLETE,
+                CONSEQUENCE_REVIEW_REQUIRED,
+                reason,
+            )
+        return VerdictRecord(
+            case_id,
+            VERDICT_NO_DRIFT,
+            baseline_license,
+            target_license,
+            "",
+            SOURCE_COMPLETE,
+            CONSEQUENCE_NO_DRIFT,
+            reason,
+        )
+
+    def _bounded_reason(self, raw_review) -> str:
+        fallback = "bounded SPDX classifier derived consequence"
+        try:
+            if isinstance(raw_review, str):
+                data = json.loads(raw_review)
+            else:
+                data = raw_review
+            text = str(data.get("reason", ""))[:600]
+            if text == "":
+                return fallback
+            return text
+        except Exception:
+            return fallback
+
+    def _derive_obligations(self, license_id: str, spdx_body: str) -> str:
+        try:
+            data = json.loads(spdx_body)
+            text = (
+                license_id
+                + " "
+                + str(data.get("name", ""))
+                + " "
+                + str(data.get("licenseText", ""))
+            ).lower()
+        except Exception:
+            text = license_id.lower()
+        items = []
+        if "agpl" in text or "affero" in text or ("network" in text and "source" in text):
+            items.append(OBLIGATION_NETWORK_COPYLEFT)
+            items.append(OBLIGATION_SOURCE_DISCLOSURE)
+        elif "gpl" in text or "source" in text:
+            items.append(OBLIGATION_SOURCE_DISCLOSURE)
+        if "noncommercial" in text or "non-commercial" in text:
+            items.append(OBLIGATION_COMMERCIAL_RESTRICTION)
+        if "field of use" in text:
+            items.append(OBLIGATION_FIELD_OF_USE)
+        if "patent retaliation" in text:
+            items.append(OBLIGATION_PATENT_RETALIATION)
+        deduped = []
+        for item in items:
+            if item not in deduped:
+                deduped.append(item)
+        deduped.sort()
+        return ",".join(deduped)
+
+    def _profile_disallows(self, use_profile: str, license_id: str, obligation: str) -> bool:
+        text = (use_profile + " " + license_id).lower()
+        if obligation == OBLIGATION_NETWORK_COPYLEFT:
+            return "network-copyleft" in text or "network copyleft" in text or "agpl" in text
+        if obligation == OBLIGATION_SOURCE_DISCLOSURE:
+            return "source disclosure" in text or "source-disclosure" in text or "agpl" in text
+        if obligation == OBLIGATION_COMMERCIAL_RESTRICTION:
+            return "commercial restriction" in text or "noncommercial" in text
+        if obligation == OBLIGATION_FIELD_OF_USE:
+            return "field of use" in text or "field-of-use" in text
+        if obligation == OBLIGATION_PATENT_RETALIATION:
+            return "patent retaliation" in text
+        return False
 
     def _verdict_dict(self, verdict: VerdictRecord) -> dict:
         return {

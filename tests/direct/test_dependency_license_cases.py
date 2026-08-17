@@ -94,3 +94,38 @@ def test_close_expired_rejects_before_expiry_and_works_at_equality(
 
     assert contract.get_package_status("cov-close") == "CLOSED"
     assert int(json.loads(contract.get_accounting())["total_locked"]) == 0
+
+
+def test_sponsor_can_cancel_active_covenant_before_expiry(direct_vm, direct_deploy, direct_alice):
+    contract = _deploy_and_activate(direct_vm, direct_deploy, direct_alice, "cov-cancel", expiry=100)
+
+    set_time(direct_vm, 50)
+    direct_vm.sender = direct_alice
+    contract.cancel_covenant("cov-cancel")
+
+    covenant = json.loads(contract.get_covenant("cov-cancel"))
+    credit = json.loads(contract.get_credit(direct_alice))
+    accounting = json.loads(contract.get_accounting())
+
+    assert covenant["status"] == "CLOSED"
+    assert int(covenant["purse"]) == 0
+    assert int(credit["credit"]) == 2 * GEN
+    assert int(accounting["total_locked"]) == 0
+
+
+def test_cancel_active_covenant_rejects_wrong_caller_and_open_case(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = _deploy_and_activate(direct_vm, direct_deploy, direct_alice, "cov-guard", expiry=100)
+
+    set_time(direct_vm, 50)
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("unauthorized"):
+        contract.cancel_covenant("cov-guard")
+
+    direct_vm.value = 1 * GEN
+    contract.open_case("cov-guard", "case-guard", "2.0.0")
+    direct_vm.value = 0
+    direct_vm.sender = direct_alice
+    with direct_vm.expect_revert("active case exists"):
+        contract.cancel_covenant("cov-guard")

@@ -11,6 +11,14 @@ const CONTRACT_PATH = path.join(ROOT, "contracts", "dependency_license_drift.py"
 const EVIDENCE_DIR = path.join(ROOT, "docs", "evidence", "bradbury");
 const DEPLOYMENT_PATH = path.join(EVIDENCE_DIR, "deployment.json");
 const LIFECYCLE_PATH = path.join(EVIDENCE_DIR, "lifecycle.json");
+const PRIVATE_KEY_NAMES = ["GENLAYER_PRIVATE_KEY", "STUDIONET_PRIVATE_KEY", "PRIVATE_KEY"];
+const CHALLENGER_KEY_NAMES = [
+  "GENLAYER_CHALLENGER_PRIVATE_KEY",
+  "STUDIONET_INTEGRATOR_PRIVATE_KEY",
+  "STUDIONET_CHALLENGER_PRIVATE_KEY",
+  "STUDIONET_PRIVATE_KEY",
+];
+const GEN = 10n ** 18n;
 
 export const BRADBURY = {
   network: "testnet-bradbury",
@@ -51,6 +59,20 @@ export function parseContractAddress(receipt) {
 export function parseTxHash(receipt) {
   if (!receipt || typeof receipt !== "object") return "";
   return receipt.txHash || receipt.transaction_hash || receipt.hash || receipt.tx_id || "";
+}
+
+export function parseTextReceiptFields(text) {
+  const body = String(text || "");
+  const txMatch =
+    body.match(/Deployment Transaction Hash:\s*(0x[a-fA-F0-9]+)/) ||
+    body.match(/Transaction Hash:\s*(0x[a-fA-F0-9]+)/);
+  const addressMatch =
+    body.match(/Contract Address:\s*(0x[a-fA-F0-9]{40})/) ||
+    body.match(/contract_address['"]?\s*:\s*['"]?(0x[a-fA-F0-9]{40})/);
+  const out = {};
+  if (txMatch) out.txHash = txMatch[1];
+  if (addressMatch) out.contractAddress = addressMatch[1];
+  return out;
 }
 
 export function sanitizeReceipt(receipt, options = {}) {
@@ -96,10 +118,18 @@ export function loadSafeEnv() {
   const parentEnv = readEnvFile(path.join(ROOT, "..", ".env"));
   const projectEnv = readEnvFile(path.join(ROOT, ".env"));
   const merged = { ...process.env, ...parentEnv, ...projectEnv };
+  let privateKey = "";
+  for (const name of PRIVATE_KEY_NAMES) {
+    if (merged[name]) {
+      privateKey = merged[name];
+      break;
+    }
+  }
+  const effectiveNetwork = merged.GENLAYER_NETWORK || BRADBURY.network;
   return {
-    network: merged.GENLAYER_NETWORK || "",
-    privateKeyPresent: Boolean(merged.GENLAYER_PRIVATE_KEY),
-    env: merged,
+    network: effectiveNetwork,
+    privateKeyPresent: Boolean(privateKey),
+    env: { ...merged, GENLAYER_NETWORK: BRADBURY.network, GENLAYER_PRIVATE_KEY: privateKey },
   };
 }
 
@@ -112,6 +142,18 @@ function requireBradburyConfig() {
     throw new Error("GENLAYER_PRIVATE_KEY is missing");
   }
   return config;
+}
+
+function readPrivateKey(env, names) {
+  for (const name of names) {
+    const value = String(env[name] || "").trim();
+    if (!value) continue;
+    if (!/^(0x)?[0-9a-fA-F]{64}$/.test(value)) {
+      throw new Error(`${name} is present but not a 32-byte hex key`);
+    }
+    return value.startsWith("0x") ? value : `0x${value}`;
+  }
+  throw new Error(`${names.join(" or ")} missing`);
 }
 
 function sourceIdentity() {
@@ -162,7 +204,21 @@ function parseJsonFromOutput(text) {
 }
 
 function runGenlayer(args, env) {
-  return execFileSync("genlayer", args, {
+  let command = "genlayer";
+  let finalArgs = args;
+  if (process.platform === "win32") {
+    for (const dir of String(process.env.PATH || "").split(path.delimiter)) {
+      const shim = path.join(dir, "genlayer.cmd");
+      const script = path.join(dir, "node_modules", "genlayer", "dist", "index.js");
+      const nodeExe = path.join(dir, "node.exe");
+      if (existsSync(shim) && existsSync(script) && existsSync(nodeExe)) {
+        command = nodeExe;
+        finalArgs = [script, ...args];
+        break;
+      }
+    }
+  }
+  return execFileSync(command, finalArgs, {
     cwd: ROOT,
     env,
     encoding: "utf8",
@@ -200,7 +256,7 @@ function deploy() {
     ["deploy", "--contract", CONTRACT_PATH, "--rpc", BRADBURY.rpcUrl],
     config.env,
   );
-  const parsed = parseJsonFromOutput(output);
+  const parsed = { ...parseJsonFromOutput(output), ...parseTextReceiptFields(output) };
   const safe = {
     ...sanitizeReceipt(parsed, BRADBURY),
     ...sourceIdentity(),
@@ -225,9 +281,204 @@ function schema() {
   console.log(output.trim());
 }
 
-function demo() {
-  requireBradburyConfig();
-  throw new Error("demo is intentionally manual until deploy receipt parsing is verified");
+function receiptSummary(hash, receipt) {
+  return {
+    txHash: hash,
+    status: String(receipt?.status_name || receipt?.statusName || receipt?.status || ""),
+    resultName: String(receipt?.resultName || receipt?.result_name || receipt?.txResultName || ""),
+    executionResult: String(
+      receipt?.txExecutionResultName || receipt?.executionResult || receipt?.execution_result || "",
+    ),
+  };
+}
+
+async function waitAccepted(client, hash) {
+  return client.waitForTransactionReceipt({
+    hash,
+    status: "ACCEPTED",
+    interval: 5000,
+    retries: 120,
+    fullTransaction: true,
+  });
+}
+
+function safeErrorMessage(error) {
+  const message = String(error?.message || error || "");
+  if (message.includes("rate limit") || message.includes("node is at capacity")) {
+    return "Bradbury RPC rate limited: node is at capacity";
+  }
+  if (message.includes("insufficient funds")) {
+    return "account has insufficient funds";
+  }
+  if (message.includes("execution reverted") || message.includes("revert")) {
+    return "transaction reverted";
+  }
+  return message.slice(0, 180) || "unknown error";
+}
+
+function writeLifecycle(lifecycle) {
+  ensureEvidenceDir();
+  writeFileSync(LIFECYCLE_PATH, JSON.stringify(lifecycle, null, 2) + "\n");
+}
+
+async function writeAccepted(client, address, functionName, args, value = 0n, options = {}) {
+  let hash = "";
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      hash = await client.writeContract({ address, functionName, args, value });
+      if (typeof options.onSubmitted === "function") {
+        options.onSubmitted(hash);
+      }
+      break;
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      if (!message.includes("rate limit") && !message.includes("node is at capacity")) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500 + attempt * 1500));
+    }
+  }
+  if (!hash) throw lastError || new Error(`${functionName} did not submit`);
+  const receipt = await waitAccepted(client, hash);
+  return receiptSummary(hash, receipt);
+}
+
+async function readView(client, address, functionName, args = []) {
+  return client.readContract({ address, functionName, args, jsonSafeReturn: true });
+}
+
+async function demo() {
+  const config = requireBradburyConfig();
+  if (!existsSync(DEPLOYMENT_PATH)) throw new Error("deployment.json is missing");
+  const deployment = JSON.parse(readFileSync(DEPLOYMENT_PATH, "utf8"));
+  if (!deployment.contractAddress) throw new Error("contractAddress is missing");
+  const { createAccount, createClient } = await import("genlayer-js");
+  const { testnetBradbury } = await import("genlayer-js/chains");
+  const sponsor = createAccount(readPrivateKey(config.env, PRIVATE_KEY_NAMES));
+  const challenger = createAccount(readPrivateKey(config.env, CHALLENGER_KEY_NAMES));
+  const sponsorClient = createClient({
+    chain: testnetBradbury,
+    endpoint: BRADBURY.rpcUrl,
+    account: sponsor,
+  });
+  const challengerClient = createClient({
+    chain: testnetBradbury,
+    endpoint: BRADBURY.rpcUrl,
+    account: challenger,
+  });
+  const reader = createClient({ chain: testnetBradbury, endpoint: BRADBURY.rpcUrl });
+  const chainId = await reader.request({ method: "eth_chainId", params: [] });
+  if (chainId !== BRADBURY.chainId) throw new Error("Bradbury chain id mismatch");
+
+  const suffix = Date.now().toString(36);
+  const covenantId = `dld-${suffix}`;
+  const caseId = `case-${suffix}`;
+  const lifecycle = {
+    network: BRADBURY.network,
+    status: "IN_PROGRESS",
+    contractAddress: deployment.contractAddress,
+    covenantId,
+    caseId,
+    sponsor: sponsor.address,
+    challenger: challenger.address,
+    txs: {},
+    canonicalReads: {},
+    evidenceIsSanitized: true,
+  };
+  writeLifecycle(lifecycle);
+  try {
+    lifecycle.txs.activate = await writeAccepted(
+      sponsorClient,
+      deployment.contractAddress,
+      "activate_covenant",
+      [
+        covenantId,
+        "ua-parser-js",
+        "1.0.37",
+        "Commercial SaaS may not accept AGPL or network-copyleft obligations.",
+        4102444800,
+      ],
+      2n * GEN,
+      {
+        onSubmitted(hash) {
+          lifecycle.txs.activate = { txHash: hash, status: "SUBMITTED" };
+          writeLifecycle(lifecycle);
+        },
+      },
+    );
+    writeLifecycle(lifecycle);
+    lifecycle.txs.openCase = await writeAccepted(
+      challengerClient,
+      deployment.contractAddress,
+      "open_case",
+      [covenantId, caseId, "2.0.0"],
+      1n * GEN,
+      {
+        onSubmitted(hash) {
+          lifecycle.txs.openCase = { txHash: hash, status: "SUBMITTED" };
+          writeLifecycle(lifecycle);
+        },
+      },
+    );
+    writeLifecycle(lifecycle);
+    lifecycle.txs.adjudicate = await writeAccepted(
+      sponsorClient,
+      deployment.contractAddress,
+      "adjudicate_case",
+      [caseId],
+      0n,
+      {
+        onSubmitted(hash) {
+          lifecycle.txs.adjudicate = { txHash: hash, status: "SUBMITTED" };
+          writeLifecycle(lifecycle);
+        },
+      },
+    );
+    writeLifecycle(lifecycle);
+  } catch (error) {
+    lifecycle.status = "FAILED_PARTIAL";
+    lifecycle.safeError = safeErrorMessage(error);
+    writeLifecycle(lifecycle);
+    throw error;
+  }
+  const statusAfterAdjudication = await readView(
+    reader,
+    deployment.contractAddress,
+    "get_package_status",
+    [covenantId],
+  );
+  const verdict = await readView(reader, deployment.contractAddress, "get_verdict", [caseId]);
+  const challengerCredit = await readView(
+    reader,
+    deployment.contractAddress,
+    "get_credit",
+    [challenger.address],
+  );
+  lifecycle.txs.withdraw = await writeAccepted(
+    challengerClient,
+    deployment.contractAddress,
+    "withdraw_credit",
+    [],
+    0n,
+    {
+      onSubmitted(hash) {
+        lifecycle.txs.withdraw = { txHash: hash, status: "SUBMITTED" };
+        writeLifecycle(lifecycle);
+      },
+    },
+  );
+  const accounting = await readView(reader, deployment.contractAddress, "get_accounting", []);
+  lifecycle.status = "ACCEPTED_NOT_FINALIZED";
+  lifecycle.canonicalReads = {
+    statusAfterAdjudication,
+    verdict,
+    challengerCreditBeforeWithdraw: challengerCredit,
+    accountingAfterWithdraw: accounting,
+  };
+  writeLifecycle(lifecycle);
+  console.log(JSON.stringify(lifecycle, null, 2));
 }
 
 function verify() {
