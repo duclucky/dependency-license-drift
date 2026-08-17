@@ -75,6 +75,15 @@ export function parseTextReceiptFields(text) {
   return out;
 }
 
+export function isTransientBradburyError(error) {
+  const message = String(error?.message || error || "");
+  return (
+    message.includes("rate limit") ||
+    message.includes("node is at capacity") ||
+    message.includes("transaction gas rate limit exceeded")
+  );
+}
+
 export function sanitizeReceipt(receipt, options = {}) {
   const network = options.network || BRADBURY.network;
   const explorerBase = options.explorerBase || BRADBURY.explorerBase;
@@ -230,6 +239,10 @@ function ensureEvidenceDir() {
   mkdirSync(EVIDENCE_DIR, { recursive: true });
 }
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 async function inspect() {
   const config = loadSafeEnv();
   const chainId = await rpcChainId();
@@ -252,10 +265,22 @@ async function inspect() {
 function deploy() {
   const config = requireBradburyConfig();
   ensureEvidenceDir();
-  const output = runGenlayer(
-    ["deploy", "--contract", CONTRACT_PATH, "--rpc", BRADBURY.rpcUrl],
-    config.env,
-  );
+  let output = "";
+  let lastError = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      output = runGenlayer(
+        ["deploy", "--contract", CONTRACT_PATH, "--rpc", BRADBURY.rpcUrl],
+        config.env,
+      );
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientBradburyError(error)) throw error;
+      sleepSync(1000 + attempt * 1500);
+    }
+  }
+  if (!output) throw lastError || new Error("deploy did not return output");
   const parsed = { ...parseJsonFromOutput(output), ...parseTextReceiptFields(output) };
   const safe = {
     ...sanitizeReceipt(parsed, BRADBURY),
@@ -304,7 +329,7 @@ async function waitAccepted(client, hash) {
 
 function safeErrorMessage(error) {
   const message = String(error?.message || error || "");
-  if (message.includes("rate limit") || message.includes("node is at capacity")) {
+  if (isTransientBradburyError(error)) {
     return "Bradbury RPC rate limited: node is at capacity";
   }
   if (message.includes("insufficient funds")) {
@@ -334,7 +359,7 @@ async function writeAccepted(client, address, functionName, args, value = 0n, op
     } catch (error) {
       lastError = error;
       const message = String(error?.message || error);
-      if (!message.includes("rate limit") && !message.includes("node is at capacity")) {
+      if (!isTransientBradburyError(message)) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 1500 + attempt * 1500));

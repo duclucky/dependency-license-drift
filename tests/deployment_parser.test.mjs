@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseExecutionResult, parseTextReceiptFields, sanitizeReceipt } from "../scripts/deploy_bradbury.mjs";
+import {
+  isTransientBradburyError,
+  parseExecutionResult,
+  parseTextReceiptFields,
+  sanitizeReceipt,
+} from "../scripts/deploy_bradbury.mjs";
 
 test("parseExecutionResult reads raw Studio leader receipt shape", () => {
   const receipt = {
@@ -69,4 +74,14 @@ Contract Address: 0xdef0000000000000000000000000000000000001
     txHash: "0xabc123",
     contractAddress: "0xdef0000000000000000000000000000000000001",
   });
+});
+
+test("isTransientBradburyError identifies RPC capacity limits", () => {
+  assert.equal(
+    isTransientBradburyError(
+      "transaction gas rate limit exceeded: node is at capacity, retry in ~521ms",
+    ),
+    true,
+  );
+  assert.equal(isTransientBradburyError("GENLAYER_PRIVATE_KEY is missing"), false);
 });
