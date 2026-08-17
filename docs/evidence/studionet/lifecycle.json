@@ -1,26 +1,43 @@
 {
   "network": "studionet",
-  "status": "FAILED_PARTIAL",
-  "contractAddress": "0x3B4e4290caE7A2c14Ec4ad8337CFBa3A91455818",
-  "covenantId": "dld-msxkqq5z",
-  "caseId": "case-msxkqq5z",
+  "status": "ACCEPTED_RECOVERY_WITHDRAWN_NOT_FINALIZED",
+  "contractAddress": "0x5026a4a9a40144efc28FfC7B850826B7F9535dF7",
+  "covenantId": "dld-msxr162j",
+  "caseId": "case-msxr162j",
   "sponsor": "0xC495ef51618D03267A1f227aFe5b27B38c748272",
   "challenger": "0x45aD397c438397A702B53a7499a78D08961D39Db",
   "txs": {
     "activate": {
-      "txHash": "0x5cea9a555f14f60a459766eb070925079ed8f59b755b87593f79ebe5220d37e7",
+      "txHash": "0xfe1205222ebf4adcb9789046bbcc2f0c3271c93f68609eeb3f5a610065dcaf4f",
       "status": "ACCEPTED",
       "resultName": "MAJORITY_AGREE",
       "executionResult": ""
     },
     "openCase": {
-      "txHash": "0x87cc9670f6d20f0e6d9548cb6f0389d4eb4bcce458f5b17ad041e70b63069be1",
+      "txHash": "0x86d751e55d3814ff02ce5b2b7aab5e2aacb8344b6bd0c10d0cacb8e7050e3754",
       "status": "ACCEPTED",
       "resultName": "MAJORITY_AGREE",
       "executionResult": ""
     },
     "adjudicate": {
-      "txHash": "0xa78d334c2c8c53c7992e946e2a21405c4c86fb9a0344523721a00f1942fee183",
+      "txHash": "0x82118df04663d63f7cb5fa2881b54debb9d2381e0cb4cb9ffe956e3aacae003f",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "recoverRetryable": {
+      "txHash": "0x26c1804cea4bdb1d59b9ee2f24ef0048308b6de6164d9805513b81a896f38477",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE"
+    },
+    "withdrawSponsor": {
+      "txHash": "0x8e2261cf0d81783a69c82c4201e7e968ead43117294568876206cca32fcd7820",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "withdrawChallenger": {
+      "txHash": "0x20b9a6698dae1c1f06ac675483114bc749dbd844e6f4309e08b37dce533105da",
       "status": "ACCEPTED",
       "resultName": "MAJORITY_AGREE",
       "executionResult": ""
@@ -28,9 +45,13 @@
   },
   "canonicalReads": {
     "statusAfterAdjudication": "RETRYABLE",
-    "verdict": "{\"baseline_license_ids\": \"\", \"case_id\": \"case-msxkqq5z\", \"consequence_class\": \"RETRY\", \"obligation_classes\": \"\", \"reason\": \"official source unavailable\", \"source_coverage\": \"UNAVAILABLE\", \"target_license_ids\": \"\", \"verdict\": \"UNVERIFIABLE\"}",
-    "challengerCreditBeforeWithdraw": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"0\"}"
+    "verdict": "{\"baseline_license_ids\": \"\", \"case_id\": \"case-msxr162j\", \"consequence_class\": \"RETRY\", \"obligation_classes\": \"\", \"reason\": \"official source unavailable\", \"source_coverage\": \"UNAVAILABLE\", \"target_license_ids\": \"\", \"verdict\": \"UNVERIFIABLE\"}",
+    "challengerCreditBeforeRecovery": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"0\"}",
+    "accountingAfterWithdraw": "{\"total_credits\": \"0\", \"total_credits_gen\": \"0\", \"total_locked\": \"0\", \"total_locked_gen\": \"0\"}",
+    "sponsorCreditAfterWithdraw": "{\"account\": \"0xc495ef51618d03267a1f227afe5b27b38c748272\", \"credit\": \"0\"}",
+    "challengerCreditAfterWithdraw": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"0\"}",
+    "statusAfterRecovery": "CLOSED",
+    "caseAfterRecovery": "{\"attempt_count\":1,\"challenge_bond\":\"0\",\"challenger\":\"0x45ad397c438397a702b53a7499a78d08961d39db\",\"covenant_id\":\"dld-msxr162j\",\"status\":\"CLOSED\",\"target_version\":\"2.0.0\",\"verdict\":\"UNVERIFIABLE\"}"
   },
-  "evidenceIsSanitized": true,
-  "safeError": "An unknown RPC error occurred.\n\nDetails: Rate limit exceeded: 30 requests per minute\nVersion: viem@2.55.17"
+  "evidenceIsSanitized": true
 }
