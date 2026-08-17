@@ -6,17 +6,17 @@
 - Project name: Dependency License Drift
 - Project slug: `dependency-license-drift`
 - Category: Intelligent Contracts
-- Status: `IMPLEMENTATION - LOCAL LIFECYCLE`
+- Status: `STUDIONET DEPLOYED - LIFECYCLE PARTIAL`
 - Repository: local scaffold only
-- Target network: `testnet-bradbury`
+- Target network: `studionet`
 
 ## One-sentence product hook
 
 Fund a dependency-use covenant, then let GenLayer validators decide whether an official package release has materially drifted from the locked license risk profile before credits or review-required state change.
 
-## Bradbury Network Override
+## Network Decision
 
-Workspace default `docs/09` targets `studionet`, but this project explicitly overrides deployment to `testnet-bradbury` at user request on 2026-08-17. Current official docs identify Bradbury as a production-like testnet for real AI/LLM workloads with GenLayer RPC `https://rpc-bradbury.genlayer.com`, chain id `4221`, currency `GEN`, explorer `https://explorer-bradbury.genlayer.com`, and faucet `https://testnet-faucet.genlayer.foundation`. Local probes on 2026-08-17 confirmed `eth_chainId = 0x107d` for Bradbury RPC and the shared chain RPC.
+The active deployment target is `studionet`, matching workspace decision D1 after Bradbury became too congested for a clean lifecycle run on 2026-08-18. Studionet CLI network info confirmed RPC `https://studio.genlayer.com/api`, chain id `61999`, currency `GEN`, and explorer `https://genlayer-explorer.vercel.app`. Bradbury attempts are archived separately under `docs/evidence/bradbury/` and are not submission evidence.
 
 ## Trust Problem
 
@@ -49,7 +49,7 @@ Workspace default `docs/09` targets `studionet`, but this project explicitly ove
 | Reuse | PASS | Other builders can integrate via status and credit views without copying semantic license adjudication. |
 | Contract count | PASS | One contract owns covenant funding, review, status, and credit; no pass-through consumer is justified for IC track. |
 | Differentiation | PASS | It is not a generic license cure/dispute; it is version-drift adjudication from official registry plus SPDX against a locked use profile. |
-| Claim-to-code | PASS | Claims map below to writes, views, tests, and Bradbury evidence. |
+| Claim-to-code | PASS | Claims map below to writes, views, tests, and Studionet evidence. |
 | Full lifecycle | PASS | Planned lifecycle: fund, open case, fetch official evidence, adjudicate, set status, withdraw credit, read zero accounting. |
 | Scope honesty | PASS | It does not give legal advice, prove private deployment obligations, or inspect source code beyond official license metadata and SPDX meaning. |
 
@@ -64,7 +64,7 @@ Workspace default `docs/09` targets `studionet`, but this project explicitly ove
 
 ## Scope And Non-Goals
 
-In scope: npm package versions, SPDX-listed licenses, locked use profiles, semantic drift classes, Bradbury deployment evidence.
+In scope: npm package versions, SPDX-listed licenses, locked use profiles, semantic drift classes, Studionet deployment evidence.
 
 Out of scope: legal advice, private commercial license documents, source-code scanning, PyPI/Maven in v1, GitHub README license claims, screenshots, claimant-hosted audit reports.
 
@@ -124,7 +124,7 @@ Fact authentication matrix:
 
 ## Consensus Design
 
-Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile. Bradbury revision 3 uses `gl.eq_principle.strict_eq` over the normalized settlement object after two accepted-not-finalized custom-validator revisions disagreed during adjudication.
+Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile. The active Studionet revision uses `gl.eq_principle.strict_eq` over the normalized settlement object after two Bradbury custom-validator revisions disagreed during adjudication.
 
 Consensus-critical fields:
 
@@ -146,7 +146,7 @@ Validator: re-fetches official evidence through `strict_eq`, derives the same bo
 | `NO_DRIFT` | Covenant remains `ACTIVE` or case closed | Package gate remains allowed | Sponsor-side credit opens for challenge bond |
 | `UNVERIFIABLE` | Case `RETRYABLE` | No hard package decision | Funds remain locked or non-penalizing recovery |
 
-Accepted/finalized boundary: public claims use finalized Bradbury receipts and canonical reads.
+Accepted/finalized boundary: public claims use Studionet receipts and canonical reads. Evidence currently proves accepted deployment and partial accepted lifecycle only; it does not prove finalized payout.
 
 ## Reusable Interface
 
@@ -176,12 +176,12 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 
 | Product claim | Contract method/state | View/read | Direct test | Network evidence |
 | --- | --- | --- | --- | --- |
-| Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | Bradbury finalized adjudication |
-| Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | Bradbury canonical read |
-| Sponsor can recover idle active covenant | `cancel_covenant` | `get_credit`, `get_accounting` | active cancel recovery and guards | Bradbury recovery if used |
+| Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | Studionet accepted retryable adjudication |
+| Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | Pending clean network lifecycle |
+| Sponsor can recover idle active covenant | `cancel_covenant` | `get_credit`, `get_accounting` | active cancel recovery and guards | Pending network recovery if used |
 | No claimant-hosted evidence can settle | source allowlist guard | `get_case` | fake JSON rejected | local test; no network claim needed |
-| Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | Bradbury withdraw receipt |
-| Expiry is entrypoint-enforced | `open_case`, `close_expired` | `get_covenant` | deadline -1, =, +1 stale-state tests | Bradbury expiry recovery if used |
+| Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | Pending clean network payout |
+| Expiry is entrypoint-enforced | `open_case`, `close_expired` | `get_covenant` | deadline -1, =, +1 stale-state tests | Pending network recovery if used |
 
 ## Analogue And Differentiation Matrix
 
@@ -194,15 +194,15 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 
 ## Deployment And Evidence Plan
 
-- Network: `testnet-bradbury`
-- GenLayer RPC: `https://rpc-bradbury.genlayer.com`
-- Chain ID: `4221`
-- Explorer: `https://explorer-bradbury.genlayer.com`
-- Faucet: `https://testnet-faucet.genlayer.foundation`
+- Network: `studionet`
+- GenLayer RPC: `https://studio.genlayer.com/api`
+- Chain ID: `61999`
+- Explorer: `https://genlayer-explorer.vercel.app`
+- Funding: Studio account funding, not the public testnet faucet.
 - Actors/wallet separation: sponsor and challenger EOAs if value lifecycle needs adversarial separation.
-- Deploy steps: local check, safe config discovery, faucet/balance check, CLI or script deploy with `testnet-bradbury`, schema read, lifecycle txs, finalized receipts, canonical reads.
-- Evidence path: `docs/evidence/bradbury/`
-- Resume/idempotency: active deployment identity binds network, source commit, contract header/API family, address, txs, and lifecycle IDs. The Bradbury lifecycle script writes sanitized IDs and submitted tx hashes before waiting for acceptance so interrupted runs can be recovered.
+- Deploy steps: local check, safe config discovery, Studio account balance check, CLI deploy with `studionet`, schema read, lifecycle txs, receipts, canonical reads.
+- Evidence path: `docs/evidence/studionet/`
+- Resume/idempotency: active deployment identity binds network, source commit, contract header/API family, address, txs, and lifecycle IDs. Evidence files write sanitized IDs and tx hashes so interrupted runs can be recovered.
 
 ## Definition Of Done
 
@@ -211,7 +211,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 - [ ] Direct consequence.
 - [ ] Reuse proof through documented views.
 - [ ] Adversarial direct tests.
-- [ ] Bradbury deployment and lifecycle.
+- [ ] Studionet deployment and lifecycle.
 - [ ] Canonical evidence.
 
 ## Honest Limitations
@@ -220,4 +220,4 @@ No legal advice; npm-only v1; SPDX expressions outside the supported grammar are
 
 ## Kill Criteria
 
-Kill or redesign if actor-hosted evidence can move funds, if validators compare only JSON shape without official-source replay, if npm/SPDX access fails on Bradbury without a retryable path, or if the design collapses into a generic license-dispute contract.
+Kill or redesign if actor-hosted evidence can move funds, if validators compare only JSON shape without official-source replay, if npm/SPDX access fails on Studionet without a retryable path, or if the design collapses into a generic license-dispute contract.

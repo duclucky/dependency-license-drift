@@ -1,0 +1,44 @@
+{
+  "network": "studionet",
+  "status": "ACCEPTED",
+  "executionResult": "UNKNOWN",
+  "txHash": "0x40d6ae7b429fe6580b3fde2cf533d848172ef9515fe26bcec80a88892e5ce7fe",
+  "contractAddress": "0x3B4e4290caE7A2c14Ec4ad8337CFBa3A91455818",
+  "explorerUrl": "https://genlayer-explorer.vercel.app/transactions/0x40d6ae7b429fe6580b3fde2cf533d848172ef9515fe26bcec80a88892e5ce7fe",
+  "contractExplorerUrl": "https://genlayer-explorer.vercel.app/address/0x3B4e4290caE7A2c14Ec4ad8337CFBa3A91455818",
+  "sourceCommitAtDeploy": "0581aa79a13265ac1ebda6ef75cf9beb7e23139d",
+  "contractPath": "contracts/dependency_license_drift.py",
+  "sourceSha256": "9a579a78f3b8413eb8329b9b3d660cc50712b51c1a000c40f529bb127b4a6391",
+  "headerSha256": "c4eae5d15a84de5c245932cb6c834adaf66d35f8e1b2ed302991c4365e37061a",
+  "schemaRead": {
+    "status": "SUCCESS",
+    "methodCount": 12,
+    "writeMethods": [
+      "activate_covenant",
+      "adjudicate_case",
+      "cancel_covenant",
+      "close_expired",
+      "open_case",
+      "withdraw_credit"
+    ],
+    "viewMethods": [
+      "get_accounting",
+      "get_case",
+      "get_covenant",
+      "get_credit",
+      "get_package_status",
+      "get_verdict"
+    ]
+  },
+  "canonicalInitialRead": {
+    "get_accounting": {
+      "total_locked_gen": "0",
+      "total_credits_gen": "0"
+    }
+  },
+  "evidenceIsSanitized": true,
+  "receiptRead": {
+    "status": "SUCCESS",
+    "targetStatus": "ACCEPTED"
+  }
+}
