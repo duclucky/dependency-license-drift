@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "powershell -ExecutionPolicy Bypass -File scripts/check.ps1",
+    "test:deployment-parser": "node --test tests/deployment_parser.test.mjs",
     "test:direct": "gltest tests/direct",
     "lint:contracts": "genvm-lint check contracts/dependency_license_drift.py"
   },
@@ -12,4 +13,3 @@
     "genlayer-js": "1.1.8"
   }
 }
-

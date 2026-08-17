@@ -42,6 +42,11 @@ if (Test-Path "tests") {
   }
 }
 
+if (Test-Path "tests/deployment_parser.test.mjs") {
+  node --test tests/deployment_parser.test.mjs
+  Assert-Success "deployment parser tests"
+}
+
 if (Test-Path "tests/direct") {
   if (Test-Path $GltestPath) {
     & $GltestPath tests/direct
