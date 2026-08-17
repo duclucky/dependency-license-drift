@@ -1,45 +1,25 @@
 {
   "network": "studionet",
-  "status": "ACCEPTED",
-  "executionResult": "UNKNOWN",
-  "txHash": "0xe88614bdf6822f21f694d926b7eae0adfef1c550cba548e44bdf8d5202a93070",
-  "contractAddress": "0x5026a4a9a40144efc28FfC7B850826B7F9535dF7",
-  "explorerUrl": "https://genlayer-explorer.vercel.app/transactions/0xe88614bdf6822f21f694d926b7eae0adfef1c550cba548e44bdf8d5202a93070",
-  "contractExplorerUrl": "https://genlayer-explorer.vercel.app/address/0x5026a4a9a40144efc28FfC7B850826B7F9535dF7",
-  "sourceCommitAtDeploy": "4eb9d0a349f290714f2bd8684c3056fdbf815d20",
+  "executionResult": "SUCCESS",
+  "statusName": "FINALIZED",
+  "resultName": "MAJORITY_AGREE",
+  "txHash": "0xec79fa0ff73700def67bc36937b4e4d1a02fe5720fe983e2e5204f08cf71b764",
+  "explorerUrl": "https://genlayer-explorer.vercel.app/transactions/0xec79fa0ff73700def67bc36937b4e4d1a02fe5720fe983e2e5204f08cf71b764",
+  "contractAddress": "0x13A27D41718a8a4ED445f8C4c708686e849748BE",
+  "commit": "30acce29074176b89a9be9fc77b35f1aa334e2b2",
   "contractPath": "contracts/dependency_license_drift.py",
-  "sourceSha256": "ec347cb0493fea041981ad530767af24e94920b87b47fb5f640f0be6d5f91b82",
+  "sourceSha256": "b609c61ea28fa091dc483d74a8f8a8832ba583143b25de7629748417039953fa",
   "headerSha256": "c4eae5d15a84de5c245932cb6c834adaf66d35f8e1b2ed302991c4365e37061a",
   "schemaRead": {
-    "status": "SUCCESS",
+    "success": true,
     "methodCount": 13,
-    "writeMethods": [
-      "activate_covenant",
-      "adjudicate_case",
-      "cancel_covenant",
-      "close_expired",
-      "open_case",
-      "recover_retryable",
-      "withdraw_credit"
-    ],
-    "viewMethods": [
-      "get_accounting",
-      "get_case",
-      "get_covenant",
-      "get_credit",
-      "get_package_status",
-      "get_verdict"
-    ]
+    "writeMethodCount": 7,
+    "viewMethodCount": 6
   },
-  "canonicalInitialRead": {
-    "get_accounting": {
-      "total_locked_gen": "0",
-      "total_credits_gen": "0"
-    }
-  },
-  "evidenceIsSanitized": true,
-  "receiptRead": {
-    "status": "SUCCESS",
-    "targetStatus": "ACCEPTED"
+  "initialAccounting": {
+    "total_credits": "0",
+    "total_credits_gen": "0",
+    "total_locked": "0",
+    "total_locked_gen": "0"
   }
 }

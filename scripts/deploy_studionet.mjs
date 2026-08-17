@@ -10,7 +10,8 @@ const ROOT = path.resolve(path.dirname(__filename), "..");
 const CONTRACT_PATH = path.join(ROOT, "contracts", "dependency_license_drift.py");
 const EVIDENCE_DIR = path.join(ROOT, "docs", "evidence", "studionet");
 const DEPLOYMENT_PATH = path.join(EVIDENCE_DIR, "deployment.json");
-const LIFECYCLE_PATH = path.join(EVIDENCE_DIR, "lifecycle.json");
+const DRIFT_PAYOUT_PATH = path.join(EVIDENCE_DIR, "drift-payout.json");
+const RECOVERY_PATH = path.join(EVIDENCE_DIR, "recovery.json");
 const PRIVATE_KEY_NAMES = ["GENLAYER_PRIVATE_KEY", "STUDIONET_PRIVATE_KEY", "PRIVATE_KEY"];
 const CHALLENGER_KEY_NAMES = [
   "GENLAYER_CHALLENGER_PRIVATE_KEY",
@@ -342,20 +343,14 @@ async function explorerTransactionSummary(hash) {
   };
 }
 
-async function waitAccepted(_client, hash) {
-  let lastError = null;
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try {
-      const summary = await explorerTransactionSummary(hash);
-      if (isAcceptedExplorerStatus(summary.status)) {
-        return summary;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(5000);
-  }
-  throw lastError || new Error(`transaction ${hash} was not accepted`);
+async function waitAccepted(client, hash) {
+  const receipt = await client.waitForTransactionReceipt({
+    hash,
+    status: "ACCEPTED",
+    interval: 5000,
+    retries: 120,
+  });
+  return receiptSummary(hash, receipt);
 }
 
 function safeErrorMessage(error) {
@@ -372,15 +367,15 @@ function safeErrorMessage(error) {
   return message.slice(0, 180) || "unknown error";
 }
 
-function writeLifecycle(lifecycle) {
+function writeLifecycle(lifecycle, lifecyclePath = DRIFT_PAYOUT_PATH) {
   ensureEvidenceDir();
-  writeFileSync(LIFECYCLE_PATH, JSON.stringify(lifecycle, null, 2) + "\n");
+  writeFileSync(lifecyclePath, JSON.stringify(lifecycle, null, 2) + "\n");
 }
 
-function loadResumableLifecycle(contractAddress, sponsorAddress, challengerAddress) {
-  if (!existsSync(LIFECYCLE_PATH)) return null;
+function loadResumableLifecycle(lifecyclePath, contractAddress, sponsorAddress, challengerAddress) {
+  if (!existsSync(lifecyclePath)) return null;
   try {
-    const lifecycle = JSON.parse(readFileSync(LIFECYCLE_PATH, "utf8"));
+    const lifecycle = JSON.parse(readFileSync(lifecyclePath, "utf8"));
     if (String(lifecycle.contractAddress || "").toLowerCase() !== contractAddress.toLowerCase()) {
       return null;
     }
@@ -430,7 +425,10 @@ async function readView(client, address, functionName, args = []) {
   return client.readContract({ address, functionName, args, jsonSafeReturn: true });
 }
 
-async function demo() {
+async function demo(options = {}) {
+  const lifecyclePath = options.lifecyclePath || DRIFT_PAYOUT_PATH;
+  const targetVersion = options.targetVersion || "2.0.0";
+  const recoveryMode = Boolean(options.recoveryMode);
   const config = requireStudionetConfig();
   if (!existsSync(DEPLOYMENT_PATH)) throw new Error("deployment.json is missing");
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_PATH, "utf8"));
@@ -454,6 +452,7 @@ async function demo() {
   if (chainId !== STUDIONET.chainId) throw new Error("studionet chain id mismatch");
 
   const existingLifecycle = loadResumableLifecycle(
+    lifecyclePath,
     deployment.contractAddress,
     sponsor.address,
     challenger.address,
@@ -476,7 +475,7 @@ async function demo() {
       canonicalReads: {},
       evidenceIsSanitized: true,
     };
-  writeLifecycle(lifecycle);
+  writeLifecycle(lifecycle, lifecyclePath);
   try {
     if (!isAcceptedExplorerStatus(lifecycle.txs.activate?.status)) {
       if (lifecycle.txs.activate?.txHash) {
@@ -500,12 +499,12 @@ async function demo() {
           {
             onSubmitted(hash) {
               lifecycle.txs.activate = { txHash: hash, status: "SUBMITTED" };
-              writeLifecycle(lifecycle);
+              writeLifecycle(lifecycle, lifecyclePath);
             },
           },
         );
       }
-      writeLifecycle(lifecycle);
+      writeLifecycle(lifecycle, lifecyclePath);
     }
     if (!isAcceptedExplorerStatus(lifecycle.txs.openCase?.status)) {
       if (lifecycle.txs.openCase?.txHash) {
@@ -518,17 +517,17 @@ async function demo() {
           challengerClient,
           deployment.contractAddress,
           "open_case",
-          [covenantId, caseId, "2.0.0"],
+          [covenantId, caseId, targetVersion],
           1n * GEN,
           {
             onSubmitted(hash) {
               lifecycle.txs.openCase = { txHash: hash, status: "SUBMITTED" };
-              writeLifecycle(lifecycle);
+              writeLifecycle(lifecycle, lifecyclePath);
             },
           },
         );
       }
-      writeLifecycle(lifecycle);
+      writeLifecycle(lifecycle, lifecyclePath);
     }
     if (!isAcceptedExplorerStatus(lifecycle.txs.adjudicate?.status)) {
       if (lifecycle.txs.adjudicate?.txHash) {
@@ -546,17 +545,17 @@ async function demo() {
           {
             onSubmitted(hash) {
               lifecycle.txs.adjudicate = { txHash: hash, status: "SUBMITTED" };
-              writeLifecycle(lifecycle);
+              writeLifecycle(lifecycle, lifecyclePath);
             },
           },
         );
       }
-      writeLifecycle(lifecycle);
+      writeLifecycle(lifecycle, lifecyclePath);
     }
   } catch (error) {
     lifecycle.status = "FAILED_PARTIAL";
     lifecycle.safeError = safeErrorMessage(error);
-    writeLifecycle(lifecycle);
+    writeLifecycle(lifecycle, lifecyclePath);
     throw error;
   }
   const statusAfterAdjudication = await readView(
@@ -573,6 +572,117 @@ async function demo() {
     [challenger.address],
   );
   try {
+    if (recoveryMode) {
+      if (!isAcceptedExplorerStatus(lifecycle.txs.recoverRetryable?.status)) {
+        if (lifecycle.txs.recoverRetryable?.txHash) {
+          lifecycle.txs.recoverRetryable = await waitAccepted(
+            challengerClient,
+            lifecycle.txs.recoverRetryable.txHash,
+          );
+        } else {
+          lifecycle.txs.recoverRetryable = await writeAccepted(
+            challengerClient,
+            deployment.contractAddress,
+            "recover_retryable",
+            [covenantId],
+            0n,
+            {
+              onSubmitted(hash) {
+                lifecycle.txs.recoverRetryable = { txHash: hash, status: "SUBMITTED" };
+                writeLifecycle(lifecycle, lifecyclePath);
+              },
+            },
+          );
+        }
+        writeLifecycle(lifecycle, lifecyclePath);
+      }
+      if (!isAcceptedExplorerStatus(lifecycle.txs.withdrawSponsor?.status)) {
+        if (lifecycle.txs.withdrawSponsor?.txHash) {
+          lifecycle.txs.withdrawSponsor = await waitAccepted(
+            sponsorClient,
+            lifecycle.txs.withdrawSponsor.txHash,
+          );
+        } else {
+          lifecycle.txs.withdrawSponsor = await writeAccepted(
+            sponsorClient,
+            deployment.contractAddress,
+            "withdraw_credit",
+            [],
+            0n,
+            {
+              onSubmitted(hash) {
+                lifecycle.txs.withdrawSponsor = { txHash: hash, status: "SUBMITTED" };
+                writeLifecycle(lifecycle, lifecyclePath);
+              },
+            },
+          );
+        }
+        writeLifecycle(lifecycle, lifecyclePath);
+      }
+      if (!isAcceptedExplorerStatus(lifecycle.txs.withdrawChallenger?.status)) {
+        if (lifecycle.txs.withdrawChallenger?.txHash) {
+          lifecycle.txs.withdrawChallenger = await waitAccepted(
+            challengerClient,
+            lifecycle.txs.withdrawChallenger.txHash,
+          );
+        } else {
+          lifecycle.txs.withdrawChallenger = await writeAccepted(
+            challengerClient,
+            deployment.contractAddress,
+            "withdraw_credit",
+            [],
+            0n,
+            {
+              onSubmitted(hash) {
+                lifecycle.txs.withdrawChallenger = { txHash: hash, status: "SUBMITTED" };
+                writeLifecycle(lifecycle, lifecyclePath);
+              },
+            },
+          );
+        }
+        writeLifecycle(lifecycle, lifecyclePath);
+      }
+      const statusAfterRecovery = await readView(
+        reader,
+        deployment.contractAddress,
+        "get_package_status",
+        [covenantId],
+      );
+      const caseAfterRecovery = await readView(
+        reader,
+        deployment.contractAddress,
+        "get_case",
+        [caseId],
+      );
+      const sponsorCreditAfterWithdraw = await readView(
+        reader,
+        deployment.contractAddress,
+        "get_credit",
+        [sponsor.address],
+      );
+      const challengerCreditAfterWithdraw = await readView(
+        reader,
+        deployment.contractAddress,
+        "get_credit",
+        [challenger.address],
+      );
+      const accounting = await readView(reader, deployment.contractAddress, "get_accounting", []);
+      lifecycle.status = "ACCEPTED_RECOVERY_WITHDRAWN_NOT_FINALIZED";
+      delete lifecycle.safeError;
+      lifecycle.canonicalReads = {
+        verdictAfterRecovery: verdict,
+        challengerCreditBeforeRecovery: challengerCredit,
+        retryableStateInferredFromAcceptedRecover: true,
+        statusAfterRecovery,
+        caseAfterRecovery,
+        sponsorCreditAfterWithdraw,
+        challengerCreditAfterWithdraw,
+        accountingAfterWithdraw: accounting,
+      };
+      writeLifecycle(lifecycle, lifecyclePath);
+      console.log(JSON.stringify(lifecycle, null, 2));
+      return;
+    }
     if (!isAcceptedExplorerStatus(lifecycle.txs.withdraw?.status)) {
       if (lifecycle.txs.withdraw?.txHash) {
         lifecycle.txs.withdraw = await waitAccepted(
@@ -589,28 +699,29 @@ async function demo() {
           {
             onSubmitted(hash) {
               lifecycle.txs.withdraw = { txHash: hash, status: "SUBMITTED" };
-              writeLifecycle(lifecycle);
+              writeLifecycle(lifecycle, lifecyclePath);
             },
           },
         );
       }
-      writeLifecycle(lifecycle);
+      writeLifecycle(lifecycle, lifecyclePath);
     }
   } catch (error) {
     lifecycle.status = "FAILED_PARTIAL";
     lifecycle.safeError = safeErrorMessage(error);
-    writeLifecycle(lifecycle);
+    writeLifecycle(lifecycle, lifecyclePath);
     throw error;
   }
   const accounting = await readView(reader, deployment.contractAddress, "get_accounting", []);
   lifecycle.status = "ACCEPTED_NOT_FINALIZED";
+  delete lifecycle.safeError;
   lifecycle.canonicalReads = {
     statusAfterAdjudication,
     verdict,
     challengerCreditBeforeWithdraw: challengerCredit,
     accountingAfterWithdraw: accounting,
   };
-  writeLifecycle(lifecycle);
+  writeLifecycle(lifecycle, lifecyclePath);
   console.log(JSON.stringify(lifecycle, null, 2));
 }
 
@@ -629,6 +740,13 @@ async function main() {
   if (command === "deploy") return deploy();
   if (command === "schema") return schema();
   if (command === "demo") return demo();
+  if (command === "recover-demo") {
+    return demo({
+      lifecyclePath: RECOVERY_PATH,
+      targetVersion: "0.0.0-dld-missing",
+      recoveryMode: true,
+    });
+  }
   if (command === "verify") return verify();
   throw new Error(`unknown command: ${command}`);
 }

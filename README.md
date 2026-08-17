@@ -4,4 +4,4 @@ Dependency License Drift is a standalone GenLayer Intelligent Contract primitive
 
 Target network: `studionet`.
 
-Status: Studionet deployed. Recovery evidence is accepted; drift payout evidence is being refreshed.
+Status: Studionet deployed. Recovery and drift payout evidence are accepted; finalization is not claimed.

@@ -1,0 +1,58 @@
+{
+  "network": "studionet",
+  "status": "ACCEPTED_RECOVERY_WITHDRAWN_NOT_FINALIZED",
+  "contractAddress": "0x13A27D41718a8a4ED445f8C4c708686e849748BE",
+  "covenantId": "dld-msxsld9d",
+  "caseId": "case-msxsld9d",
+  "sponsor": "0xC495ef51618D03267A1f227aFe5b27B38c748272",
+  "challenger": "0x45aD397c438397A702B53a7499a78D08961D39Db",
+  "txs": {
+    "activate": {
+      "txHash": "0xee15163627b6a42471983405e498978ee98babf27b047f0507e239403ec53ca3",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "openCase": {
+      "txHash": "0x9a50d123326129c21549ffcdb8f69c5579197d9667681f062ed01a4d68213a5e",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "adjudicate": {
+      "txHash": "0xd317ead135c993b667ac5551c04a934eb72e42a1633e6e05f06c6224b0dfedb2",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "recoverRetryable": {
+      "txHash": "0x32be9f7b3d2feb78f8aa6e61db64a79261c80fc0cf06158187bc24c6cb9c81df",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "withdrawSponsor": {
+      "txHash": "0xda9683437a61caa70cf641d111a52b29e51558917f2aaee5de39383c5e7bccf7",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "withdrawChallenger": {
+      "txHash": "0x6d333801cc6d2023050238d7ff2d0d822faf6f6fc0d6f87c875af71099ef8bfa",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    }
+  },
+  "canonicalReads": {
+    "verdictAfterRecovery": "{\"baseline_license_ids\": \"\", \"case_id\": \"case-msxsld9d\", \"consequence_class\": \"RETRY\", \"obligation_classes\": \"\", \"reason\": \"official source unavailable\", \"source_coverage\": \"UNAVAILABLE\", \"target_license_ids\": \"\", \"verdict\": \"UNVERIFIABLE\"}",
+    "challengerCreditBeforeRecovery": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"0\"}",
+    "retryableStateInferredFromAcceptedRecover": true,
+    "statusAfterRecovery": "CLOSED",
+    "caseAfterRecovery": "{\"attempt_count\": 1, \"challenge_bond\": \"0\", \"challenger\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"covenant_id\": \"dld-msxsld9d\", \"status\": \"CLOSED\", \"target_version\": \"0.0.0-dld-missing\", \"verdict\": \"UNVERIFIABLE\"}",
+    "sponsorCreditAfterWithdraw": "{\"account\": \"0xc495ef51618d03267a1f227afe5b27b38c748272\", \"credit\": \"0\"}",
+    "challengerCreditAfterWithdraw": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"0\"}",
+    "accountingAfterWithdraw": "{\"total_credits\": \"0\", \"total_credits_gen\": \"0\", \"total_locked\": \"0\", \"total_locked_gen\": \"0\"}"
+  },
+  "evidenceIsSanitized": true
+}

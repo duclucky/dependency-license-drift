@@ -1,0 +1,42 @@
+{
+  "network": "studionet",
+  "status": "ACCEPTED_NOT_FINALIZED",
+  "contractAddress": "0x13A27D41718a8a4ED445f8C4c708686e849748BE",
+  "covenantId": "dld-msxsh26d",
+  "caseId": "case-msxsh26d",
+  "sponsor": "0xC495ef51618D03267A1f227aFe5b27B38c748272",
+  "challenger": "0x45aD397c438397A702B53a7499a78D08961D39Db",
+  "txs": {
+    "activate": {
+      "txHash": "0x16f82325a1f37dcbccc8697280711f67f0ee5ce96cca7075593db9c8ac442919",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "openCase": {
+      "txHash": "0xf246042dd110eeff0269fda010f7d417e0c46840da4c9c75c698c00222e81bf9",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "adjudicate": {
+      "txHash": "0x64601534aae8b47b4947f8ac6627cafb57eb6727f9ca299381cef890c247b12c",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    },
+    "withdraw": {
+      "txHash": "0x8cf72b46749b718e7dc8bb902e3c5828a95f2188ba0de35e139defeb787e0b0f",
+      "status": "ACCEPTED",
+      "resultName": "MAJORITY_AGREE",
+      "executionResult": ""
+    }
+  },
+  "canonicalReads": {
+    "statusAfterAdjudication": "REVIEW_REQUIRED",
+    "verdict": "{\"baseline_license_ids\": \"MIT\", \"case_id\": \"case-msxsh26d\", \"consequence_class\": \"REVIEW_REQUIRED\", \"obligation_classes\": \"NETWORK_COPYLEFT,SOURCE_DISCLOSURE\", \"reason\": \"bounded SPDX classifier derived consequence\", \"source_coverage\": \"COMPLETE\", \"target_license_ids\": \"AGPL-3.0-or-later\", \"verdict\": \"DRIFT_CONFIRMED\"}",
+    "challengerCreditBeforeWithdraw": "{\"account\": \"0x45ad397c438397a702b53a7499a78d08961d39db\", \"credit\": \"3000000000000000000\"}",
+    "accountingAfterWithdraw": "{\"total_credits\": \"0\", \"total_credits_gen\": \"0\", \"total_locked\": \"0\", \"total_locked_gen\": \"0\"}"
+  },
+  "evidenceIsSanitized": true
+}

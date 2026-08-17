@@ -2,6 +2,10 @@
 
 This directory stores sanitized Studionet deployment and lifecycle evidence.
 
+- `deployment.json`: active contract deployment and schema/accounting reads.
+- `recovery.json`: accepted retryable recovery and zero-accounting proof.
+- `drift-payout.json`: accepted drift payout lifecycle proof, when present.
+
 Rules:
 
 - Keep only allowlisted public fields such as network, source commit/hash, contract address, transaction hash, execution result, schema summary, and explorer URL.

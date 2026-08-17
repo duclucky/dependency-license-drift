@@ -6,7 +6,7 @@
 - Project name: Dependency License Drift
 - Project slug: `dependency-license-drift`
 - Category: Intelligent Contracts
-- Status: `STUDIONET DEPLOYED - LIFECYCLE PARTIAL`
+- Status: `STUDIONET DEPLOYED - RECOVERY AND DRIFT PAYOUT ACCEPTED`
 - Repository: local scaffold only
 - Target network: `studionet`
 
@@ -148,7 +148,7 @@ Validator: re-fetches official evidence through `strict_eq`, derives the same bo
 | `NO_DRIFT` | Covenant remains `ACTIVE` or case closed | Package gate remains allowed | Sponsor-side credit opens for challenge bond |
 | `UNVERIFIABLE` | Case `RETRYABLE` | No hard package decision | Funds remain locked until non-penalizing recovery refunds sponsor and challenger |
 
-Accepted/finalized boundary: public claims use Studionet receipts and canonical reads. Evidence currently proves accepted deployment and partial accepted lifecycle only; it does not prove finalized payout.
+Accepted/finalized boundary: public claims use Studionet receipts and canonical reads. Evidence proves accepted retryable recovery and accepted drift payout/withdrawal with zero accounting; it does not claim finalized payout.
 
 ## Reusable Interface
 
@@ -178,12 +178,12 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 
 | Product claim | Contract method/state | View/read | Direct test | Network evidence |
 | --- | --- | --- | --- | --- |
-| Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | Studionet accepted retryable adjudication |
-| Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | Pending clean network lifecycle |
+| Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | `docs/evidence/studionet/drift-payout.json` |
+| Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | `docs/evidence/studionet/drift-payout.json` |
 | Sponsor can recover idle active covenant | `cancel_covenant` | `get_credit`, `get_accounting` | active cancel recovery and guards | Pending network recovery if used |
-| Either value-interest actor can recover retryable source failure | `recover_retryable` | `get_credit`, `get_accounting` | retryable recovery test | Pending Studionet recovery |
+| Either value-interest actor can recover retryable source failure | `recover_retryable` | `get_credit`, `get_accounting` | retryable recovery test | `docs/evidence/studionet/recovery.json` |
 | No claimant-hosted evidence can settle | source allowlist guard | `get_case` | fake JSON rejected | local test; no network claim needed |
-| Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | Pending clean network payout |
+| Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | `docs/evidence/studionet/drift-payout.json` and `docs/evidence/studionet/recovery.json` |
 | Expiry is entrypoint-enforced | `open_case`, `close_expired` | `get_covenant` | deadline -1, =, +1 stale-state tests | Pending network recovery if used |
 
 ## Analogue And Differentiation Matrix
@@ -209,13 +209,13 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 
 ## Definition Of Done
 
-- [ ] Reusable primitive.
-- [ ] Semantic validator judgment.
-- [ ] Direct consequence.
-- [ ] Reuse proof through documented views.
-- [ ] Adversarial direct tests.
-- [ ] Studionet deployment and lifecycle.
-- [ ] Canonical evidence.
+- [x] Reusable primitive.
+- [x] Semantic validator judgment.
+- [x] Direct consequence.
+- [x] Reuse proof through documented views.
+- [x] Adversarial direct tests.
+- [x] Studionet deployment and accepted lifecycle evidence.
+- [x] Canonical accepted evidence.
 
 ## Honest Limitations
 
