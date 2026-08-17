@@ -33,8 +33,21 @@ class Covenant:
     active_case_id: str
 
 
+@allow_storage
+@dataclass
+class CaseRecord:
+    covenant_id: str
+    challenger: Address
+    target_version: str
+    status: str
+    challenge_bond: bigint
+    attempt_count: u8
+    verdict: str
+
+
 class DependencyLicenseDrift(gl.Contract):
     covenants: TreeMap[str, Covenant]
+    cases: TreeMap[str, CaseRecord]
     credits: TreeMap[str, bigint]
     total_locked: bigint
     total_credits: bigint
@@ -57,6 +70,12 @@ class DependencyLicenseDrift(gl.Contract):
         if covenant.status == STATUS_CASE_OPEN:
             return STATUS_CASE_OPEN
         return covenant.status
+
+    @gl.public.view
+    def get_case(self, case_id: str) -> str:
+        if case_id not in self.cases:
+            return "{}"
+        return self._case_json(self.cases[case_id])
 
     @gl.public.view
     def get_credit(self, account: Address) -> str:
@@ -111,7 +130,53 @@ class DependencyLicenseDrift(gl.Contract):
 
     @gl.public.write.payable
     def open_case(self, covenant_id: str, case_id: str, target_version: str) -> None:
-        raise gl.vm.UserError("case opening not implemented")
+        self._require_id(case_id, "case id")
+        self._require_text(target_version, "target version", MAX_VERSION_LEN)
+        if case_id in self.cases:
+            raise gl.vm.UserError("case exists")
+        if gl.message.value <= 0:
+            raise gl.vm.UserError("challenge bond must be positive")
+        covenant = self._require_covenant(covenant_id)
+        if covenant.active_case_id != "":
+            raise gl.vm.UserError("active case exists")
+        if covenant.status != STATUS_ACTIVE:
+            raise gl.vm.UserError("covenant not active")
+        if self._now() >= covenant.expiry:
+            raise gl.vm.UserError("covenant expired")
+        bond = bigint(gl.message.value)
+        self.cases[case_id] = CaseRecord(
+            covenant_id=covenant_id,
+            challenger=gl.message.sender_address,
+            target_version=target_version,
+            status=STATUS_CASE_OPEN,
+            challenge_bond=bond,
+            attempt_count=u8(0),
+            verdict="",
+        )
+        covenant.status = STATUS_CASE_OPEN
+        covenant.active_case_id = case_id
+        self.covenants[covenant_id] = covenant
+        self.total_locked = bigint(int(self.total_locked) + int(bond))
+
+    @gl.public.write
+    def close_expired(self, covenant_id: str) -> None:
+        covenant = self._require_covenant(covenant_id)
+        if self._addr_key(gl.message.sender_address) != self._addr_key(covenant.sponsor):
+            raise gl.vm.UserError("unauthorized")
+        if self._now() < covenant.expiry:
+            raise gl.vm.UserError("covenant not expired")
+        if covenant.status == STATUS_CASE_OPEN:
+            raise gl.vm.UserError("active case exists")
+        if covenant.status == STATUS_CLOSED:
+            raise gl.vm.UserError("covenant closed")
+        amount = covenant.purse
+        covenant.purse = bigint(0)
+        covenant.status = STATUS_CLOSED
+        covenant.active_case_id = ""
+        self.covenants[covenant_id] = covenant
+        if amount > 0:
+            self.total_locked = bigint(int(self.total_locked) - int(amount))
+            self._credit(covenant.sponsor, amount)
 
     def _require_id(self, value: str, name: str) -> None:
         if value == "" or len(value) > MAX_ID_LEN:
@@ -125,6 +190,17 @@ class DependencyLicenseDrift(gl.Contract):
         if hasattr(account, "as_hex"):
             return account.as_hex.lower()
         return Address(account).as_hex.lower()
+
+    def _require_covenant(self, covenant_id: str) -> Covenant:
+        if covenant_id not in self.covenants:
+            raise gl.vm.UserError("unknown covenant")
+        return self.covenants[covenant_id]
+
+    def _credit(self, account: Address, amount: bigint) -> None:
+        key = self._addr_key(account)
+        current = self.credits[key] if key in self.credits else bigint(0)
+        self.credits[key] = bigint(int(current) + int(amount))
+        self.total_credits = bigint(int(self.total_credits) + int(amount))
 
     def _now(self) -> bigint:
         try:
@@ -157,6 +233,20 @@ class DependencyLicenseDrift(gl.Contract):
                 "status": covenant.status,
                 "purse": str(covenant.purse),
                 "active_case_id": covenant.active_case_id,
+            },
+            sort_keys=True,
+        )
+
+    def _case_json(self, case: CaseRecord) -> str:
+        return json.dumps(
+            {
+                "covenant_id": case.covenant_id,
+                "challenger": self._addr_key(case.challenger),
+                "target_version": case.target_version,
+                "status": case.status,
+                "challenge_bond": str(case.challenge_bond),
+                "attempt_count": int(case.attempt_count),
+                "verdict": case.verdict,
             },
             sort_keys=True,
         )
