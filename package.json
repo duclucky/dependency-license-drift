@@ -1,0 +1,15 @@
+{
+  "name": "dependency-license-drift",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "powershell -ExecutionPolicy Bypass -File scripts/check.ps1",
+    "test:direct": "gltest tests/direct",
+    "lint:contracts": "genvm-lint check contracts/dependency_license_drift.py"
+  },
+  "devDependencies": {
+    "genlayer-js": "1.1.8"
+  }
+}
+
