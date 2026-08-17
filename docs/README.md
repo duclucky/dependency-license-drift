@@ -31,7 +31,7 @@ The active deployment target is `studionet`, matching workspace decision D1 afte
 - Evidence class + authenticity mechanism: validators fetch official npm registry version metadata and canonical SPDX license JSON/text from authoritative domains; no claimant-hosted evidence can settle.
 - Consensus question: does the target version's license meaning materially drift from the baseline version under the locked use profile?
 - State machine: `DRAFT -> ACTIVE -> CASE_OPEN -> REVIEW_PENDING -> DRIFT_CONFIRMED | NO_DRIFT | RETRYABLE -> CREDIT_WITHDRAWN | CLOSED`.
-- Direct consequence: a confirmed drift marks the covenant `REVIEW_REQUIRED` and opens challenger/remediation credit; no drift returns challenge credit to the sponsor side; retryable leaves funds locked without penalty.
+- Direct consequence: a confirmed drift marks the covenant `REVIEW_REQUIRED` and opens challenger/remediation credit; no drift returns challenge credit to the sponsor side; retryable can be recovered without penalty by refunding sponsor purse and challenge bond.
 - Reuse surface: dependency-risk funds, enterprise package gates, OSS consortiums, and release automation can call covenant/case/status/credit views.
 
 ## Mandatory Gate Matrix
@@ -83,10 +83,11 @@ ACTIVE --open_case/challenger+bond--> CASE_OPEN
 CASE_OPEN --adjudicate/anyone--> REVIEW_PENDING -> DRIFT_CONFIRMED | NO_DRIFT | RETRYABLE
 DRIFT_CONFIRMED --withdraw_credit/challenger--> CREDIT_WITHDRAWN
 NO_DRIFT --withdraw_credit/sponsor--> CREDIT_WITHDRAWN
+RETRYABLE --recover_retryable/sponsor-or-challenger--> CLOSED
 ACTIVE|RETRYABLE --close_expired/sponsor after expiry--> CLOSED
 ```
 
-Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`now < expiry` is active, equality is expired). `open_case` checks expiry directly. `close_expired` checks sponsor, state, zero active case or retryable state, and `now >= expiry` directly. `cancel_covenant` is non-temporal sponsor recovery for an `ACTIVE` covenant with no open case.
+Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`now < expiry` is active, equality is expired). `open_case` checks expiry directly. `close_expired` checks sponsor, state, zero active case or retryable state, and `now >= expiry` directly. `cancel_covenant` is non-temporal sponsor recovery for an `ACTIVE` covenant with no open case. `recover_retryable` is non-temporal and can be called by either value-interest actor after official-source failure makes the case retryable.
 
 ## Write-Method Safety Matrix
 
@@ -97,14 +98,15 @@ Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`n
 | `open_case` | Challenger | `ACTIVE` | `CASE_OPEN`, terminal, `CLOSED` | `now < expiry`; stale state after expiry rejects | One active case per covenant | Locks challenge bond | `get_case`, `get_covenant` | wrong state, expired boundary, duplicate, zero bond |
 | `adjudicate_case` | Anyone | `CASE_OPEN`, `RETRYABLE` | terminal, closed | N/A; legality derives from state and source availability | Attempt ID append-only; settled case rejects | Opens credits or keeps locked on retry | `get_verdict`, `get_credit`, `get_status` | source failure, bounded obligation mismatch, duplicate settle |
 | `withdraw_credit` | Credited address | Credit > 0 | No credit | N/A; credit ownership only | Zeroes before transfer; second call rejects | Transfers native GEN to caller | `get_credit`, `get_accounting` | wrong caller, double withdraw, transfer invariant |
+| `recover_retryable` | Sponsor or challenger | `RETRYABLE` with active case | non-retryable, missing case, wrong caller | N/A; official-source failure recovery | Second recovery rejects | Credits sponsor purse to sponsor and bond to challenger | `get_covenant`, `get_case`, `get_credit`, `get_accounting` | wrong caller, non-retryable, double recovery |
 | `close_expired` | Sponsor | `ACTIVE` with no active case, or `RETRYABLE` | `CASE_OPEN`, terminal settled | `now >= expiry`; equality expired | Second close rejects | Credits remaining locked funds to sponsor | `get_covenant`, `get_credit` | wrong caller, expiry - 1, exact expiry, active case, double close |
 
 ## Value-Destination Matrix
 
 | Value item | Payer/source | Locked state | Release destination | Refund destination | Forfeit destination | Terminal states covered | Duplicate/late/retry behavior | Canonical proof view |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sponsor purse | Sponsor | `ACTIVE`, `CASE_OPEN`, `RETRYABLE` | Challenger/remediation credit on `DRIFT_CONFIRMED` | Sponsor credit on active cancel or expiry close | N/A | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Retry keeps locked; duplicate settlement rejects; active cancel rejects with open case | `get_accounting`, `get_credit` |
-| Challenge bond | Challenger | `CASE_OPEN`, `RETRYABLE` | Challenger credit on `DRIFT_CONFIRMED` | Challenger credit on `RETRYABLE` close policy if specified | Sponsor credit on `NO_DRIFT` | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Duplicate settlement rejects; late open rejects | `get_case`, `get_credit` |
+| Sponsor purse | Sponsor | `ACTIVE`, `CASE_OPEN`, `RETRYABLE` | Challenger/remediation credit on `DRIFT_CONFIRMED` | Sponsor credit on active cancel, retryable recovery, or expiry close | N/A | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Retry keeps locked until either actor recovers; duplicate settlement rejects; active cancel rejects with open case | `get_accounting`, `get_credit` |
+| Challenge bond | Challenger | `CASE_OPEN`, `RETRYABLE` | Challenger credit on `DRIFT_CONFIRMED` | Challenger credit on retryable recovery | Sponsor credit on `NO_DRIFT` | `DRIFT_CONFIRMED`, `NO_DRIFT`, `CLOSED` | Duplicate settlement rejects; late open rejects; retryable recovery closes case | `get_case`, `get_credit` |
 
 ## Evidence Policy
 
@@ -144,13 +146,13 @@ Validator: re-fetches official evidence through `strict_eq`, derives the same bo
 | --- | --- | --- | --- |
 | `DRIFT_CONFIRMED` | Covenant status `REVIEW_REQUIRED` | Package gate blocks or requires review | Challenger/remediation credit opens |
 | `NO_DRIFT` | Covenant remains `ACTIVE` or case closed | Package gate remains allowed | Sponsor-side credit opens for challenge bond |
-| `UNVERIFIABLE` | Case `RETRYABLE` | No hard package decision | Funds remain locked or non-penalizing recovery |
+| `UNVERIFIABLE` | Case `RETRYABLE` | No hard package decision | Funds remain locked until non-penalizing recovery refunds sponsor and challenger |
 
 Accepted/finalized boundary: public claims use Studionet receipts and canonical reads. Evidence currently proves accepted deployment and partial accepted lifecycle only; it does not prove finalized payout.
 
 ## Reusable Interface
 
-Write methods: `activate_covenant`, `cancel_covenant`, `open_case`, `adjudicate_case`, `withdraw_credit`, `close_expired`.
+Write methods: `activate_covenant`, `cancel_covenant`, `open_case`, `adjudicate_case`, `recover_retryable`, `withdraw_credit`, `close_expired`.
 
 View methods: `get_covenant`, `get_case`, `get_verdict`, `get_package_status`, `get_credit`, `get_accounting`.
 
@@ -170,7 +172,7 @@ Consumer/callback: none in v1; other builders consume views.
 
 Happy path: MIT baseline to AGPL target opens `REVIEW_REQUIRED` and challenger credit.
 
-Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, active cancel recovery, no active case double settlement, fake source, unsupported license expression, missing SPDX, accounting unchanged on rejection, no double withdraw, retryable source failure.
+Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, active cancel recovery, retryable recovery, no active case double settlement, fake source, unsupported license expression, missing SPDX, accounting unchanged on rejection, no double withdraw, retryable source failure.
 
 ## Claim-To-Code Matrix
 
@@ -179,6 +181,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 | Official registry/SPDX evidence drives verdict | `adjudicate_case` | `get_verdict` | mocked npm/SPDX happy path and source failure | Studionet accepted retryable adjudication |
 | Drift creates review-required status | `DRIFT_CONFIRMED` state | `get_package_status` | MIT->AGPL case | Pending clean network lifecycle |
 | Sponsor can recover idle active covenant | `cancel_covenant` | `get_credit`, `get_accounting` | active cancel recovery and guards | Pending network recovery if used |
+| Either value-interest actor can recover retryable source failure | `recover_retryable` | `get_credit`, `get_accounting` | retryable recovery test | Pending Studionet recovery |
 | No claimant-hosted evidence can settle | source allowlist guard | `get_case` | fake JSON rejected | local test; no network claim needed |
 | Credits withdraw once | `withdraw_credit` | `get_credit`, `get_accounting` | double-withdraw/accounting test | Pending clean network payout |
 | Expiry is entrypoint-enforced | `open_case`, `close_expired` | `get_covenant` | deadline -1, =, +1 stale-state tests | Pending network recovery if used |

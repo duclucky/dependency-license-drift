@@ -183,3 +183,28 @@ def test_unavailable_source_is_retryable_and_non_penalizing(
     assert contract.get_package_status("cov-1") == "RETRYABLE"
     assert int(accounting["total_locked"]) == 3 * GEN
     assert int(json.loads(contract.get_credit(direct_bob))["credit"]) == 0
+
+
+def test_retryable_case_can_be_recovered_without_waiting_for_expiry(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = _activate_and_open(direct_vm, direct_deploy, direct_alice, direct_bob)
+    direct_vm.mock_web(r".*", {"method": "GET", "status": 503, "body": ""})
+    direct_vm.mock_llm(r".*", json.dumps(drift_result()))
+    contract.adjudicate_case("case-1")
+
+    direct_vm.sender = direct_bob
+    contract.recover_retryable("cov-1")
+
+    case = json.loads(contract.get_case("case-1"))
+    sponsor_credit = json.loads(contract.get_credit(direct_alice))
+    challenger_credit = json.loads(contract.get_credit(direct_bob))
+    accounting = json.loads(contract.get_accounting())
+
+    assert case["status"] == "CLOSED"
+    assert contract.get_package_status("cov-1") == "CLOSED"
+    assert int(sponsor_credit["credit"]) == 2 * GEN
+    assert int(challenger_credit["credit"]) == 1 * GEN
+    assert int(accounting["total_locked"]) == 0
+    with direct_vm.expect_revert("covenant not retryable"):
+        contract.recover_retryable("cov-1")

@@ -260,6 +260,35 @@ class DependencyLicenseDrift(gl.Contract):
             self._credit(covenant.sponsor, refund)
 
     @gl.public.write
+    def recover_retryable(self, covenant_id: str) -> None:
+        covenant = self._require_covenant(covenant_id)
+        if covenant.status != STATUS_RETRYABLE:
+            raise gl.vm.UserError("covenant not retryable")
+        if covenant.active_case_id == "" or covenant.active_case_id not in self.cases:
+            raise gl.vm.UserError("retryable case missing")
+        case_id = covenant.active_case_id
+        case = self.cases[case_id]
+        caller = self._addr_key(gl.message.sender_address)
+        if caller != self._addr_key(covenant.sponsor) and caller != self._addr_key(case.challenger):
+            raise gl.vm.UserError("unauthorized")
+        sponsor_amount = covenant.purse
+        challenger_amount = case.challenge_bond
+        total_refund = bigint(int(sponsor_amount) + int(challenger_amount))
+        covenant.purse = bigint(0)
+        covenant.status = STATUS_CLOSED
+        covenant.active_case_id = ""
+        case.challenge_bond = bigint(0)
+        case.status = STATUS_CLOSED
+        self.covenants[covenant_id] = covenant
+        self.cases[case_id] = case
+        if total_refund > 0:
+            self.total_locked = bigint(int(self.total_locked) - int(total_refund))
+            if sponsor_amount > 0:
+                self._credit(covenant.sponsor, sponsor_amount)
+            if challenger_amount > 0:
+                self._credit(case.challenger, challenger_amount)
+
+    @gl.public.write
     def adjudicate_case(self, case_id: str) -> None:
         if case_id not in self.cases:
             raise gl.vm.UserError("unknown case")
