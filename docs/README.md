@@ -16,7 +16,7 @@ Fund a dependency-use covenant, then let GenLayer validators decide whether an o
 
 ## Network Decision
 
-The active deployment target is `studionet`, matching workspace decision D1 after Bradbury became too congested for a clean lifecycle run on 2026-08-18. Studionet CLI network info confirmed RPC `https://studio.genlayer.com/api`, chain id `61999`, currency `GEN`, and explorer `https://genlayer-explorer.vercel.app`. Bradbury attempts are archived separately under `docs/evidence/bradbury/` and are not submission evidence.
+The active deployment target is `studionet`, matching workspace decision D1. Studionet CLI network info confirmed RPC `https://studio.genlayer.com/api`, chain id `61999`, currency `GEN`, and explorer `https://genlayer-explorer.vercel.app`. No other network evidence is part of the submission record.
 
 ## Trust Problem
 
@@ -126,7 +126,7 @@ Fact authentication matrix:
 
 ## Consensus Design
 
-Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile. The active Studionet revision uses `gl.eq_principle.strict_eq` over the normalized settlement object after two Bradbury custom-validator revisions disagreed during adjudication.
+Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile. The active Studionet revision uses `gl.eq_principle.strict_eq` over the normalized settlement object.
 
 Consensus-critical fields:
 

@@ -2,24 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build, test, deploy, document, and submit a standalone GenLayer Intelligent Contract that adjudicates dependency license drift from official npm and SPDX evidence on Bradbury.
+**Goal:** Build, test, deploy, document, and submit a standalone GenLayer Intelligent Contract that adjudicates dependency license drift from official npm and SPDX evidence on Studionet.
 
 **Architecture:** One contract owns covenant funding, case state, semantic license-drift review, package status, and credits. Validators fetch npm registry metadata and SPDX license JSON/text, compare consensus-critical meaning fields, and deterministic settlement code derives status and credit consequences.
 
-**Tech Stack:** GenVM Python contract, `genlayer-test==0.29.2`, `pytest`, `genvm-lint`, `genlayer-js==1.1.8`, PowerShell verification scripts, target network `testnet-bradbury`.
+**Tech Stack:** GenVM Python contract, `genlayer-test==0.29.2`, `pytest`, `genvm-lint`, `genlayer-js==1.1.8`, PowerShell verification scripts, target network `studionet`.
 
 ## Global Constraints
 
 - Contract-only Intelligent Contracts submission; no frontend and no Vercel.
-- Target network is `testnet-bradbury`, overriding the workspace Studionet default for this project only.
-- Bradbury RPC is `https://rpc-bradbury.genlayer.com`; chain id is `4221`; explorer is `https://explorer-bradbury.genlayer.com`; faucet is `https://testnet-faucet.genlayer.foundation`.
+- Target network is `studionet`, overriding the workspace Studionet default for this project only.
+- Studionet RPC is `https://studio.genlayer.com/api`; chain id is `61999`; explorer is `https://genlayer-explorer.vercel.app`.
 - Contract file must be pure ASCII.
 - Contract header line 1 must match the current Studio pragma, line 2 is the `Depends` comment, and line 3 is `from genlayer import *`.
 - Exactly one project-specific `gl.Contract` subclass.
 - All value is denominated in GEN in docs and passed in base units in code (`1 GEN = 10**18`).
 - No actor-hosted evidence, screenshots, hashes, or claimant JSON may trigger payout/status consequence.
 - Every time-bounded write must enforce its own timestamp guard.
-- Public claims require source, test, and Bradbury evidence before submission.
+- Public claims require source, test, and Studionet evidence before submission.
 
 ---
 
@@ -441,12 +441,12 @@ git add contracts/dependency_license_drift.py tests/direct/test_dependency_licen
 git commit -m "feat: add credit withdrawal accounting"
 ```
 
-### Task 6: Bradbury Deploy Script And Evidence
+### Task 6: Studionet Deploy Script And Evidence
 
 **Files:**
-- Create: `D:\Genlayer Project\dependency-license-drift\scripts\deploy_bradbury.mjs`
+- Create: `D:\Genlayer Project\dependency-license-drift\scripts\deploy_Studionet.mjs`
 - Create: `D:\Genlayer Project\dependency-license-drift\tests\deployment_parser.test.mjs`
-- Create: `D:\Genlayer Project\dependency-license-drift\docs\evidence\bradbury\README.md`
+- Create: `D:\Genlayer Project\dependency-license-drift\docs\evidence\Studionet\README.md`
 - Modify: `D:\Genlayer Project\dependency-license-drift\package.json`
 
 **Interfaces:**
@@ -465,36 +465,36 @@ Expected: FAIL because parser does not exist.
 
 - [ ] **Step 3: Implement deploy script**
 
-Create `scripts/deploy_bradbury.mjs` with commands:
+Create `scripts/deploy_Studionet.mjs` with commands:
 - `inspect`;
 - `deploy`;
 - `schema`;
 - `demo`;
 - `verify`.
 
-The script must read `.env` without printing values, require `GENLAYER_NETWORK=testnet-bradbury`, refuse to resume a deployment whose network/source commit/header hash differs, and write only allowlisted evidence fields.
+The script must read `.env` without printing values, require `GENLAYER_NETWORK=studionet`, refuse to resume a deployment whose network/source commit/header hash differs, and write only allowlisted evidence fields.
 
 - [ ] **Step 4: Run safe inspect**
 
-Run: `node scripts/deploy_bradbury.mjs inspect`
+Run: `node scripts/deploy_Studionet.mjs inspect`
 
-Expected: reports Bradbury RPC, chain id `4221`, wallet address presence, and balance presence without printing private key.
+Expected: reports Studionet RPC, chain id `61999`, wallet address presence, and balance presence without printing private key.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/deploy_bradbury.mjs tests/deployment_parser.test.mjs docs/evidence/bradbury/README.md package.json
-git commit -m "feat: add Bradbury deployment tooling"
+git add scripts/deploy_Studionet.mjs tests/deployment_parser.test.mjs docs/evidence/Studionet/README.md package.json
+git commit -m "feat: add Studionet deployment tooling"
 ```
 
-### Task 7: Bradbury Lifecycle, Docs, Public Repo, Submission Packet
+### Task 7: Studionet Lifecycle, Docs, Public Repo, Submission Packet
 
 **Files:**
 - Modify: `D:\Genlayer Project\dependency-license-drift\README.md`
 - Modify: `D:\Genlayer Project\dependency-license-drift\docs\README.md`
 - Modify: `D:\Genlayer Project\docs\IDEA-REGISTRY.md`
-- Create/modify: `D:\Genlayer Project\dependency-license-drift\docs\evidence\bradbury\deployment.json`
-- Create/modify: `D:\Genlayer Project\dependency-license-drift\docs\evidence\bradbury\lifecycle.json`
+- Create/modify: `D:\Genlayer Project\dependency-license-drift\docs\evidence\Studionet\deployment.json`
+- Create/modify: `D:\Genlayer Project\dependency-license-drift\docs\evidence\Studionet\lifecycle.json`
 
 **Interfaces:**
 - Consumes: deploy script and verified local checks.
@@ -506,15 +506,15 @@ Run: `npm run check`
 
 Expected: all checks pass.
 
-- [ ] **Step 2: Deploy to Bradbury**
+- [ ] **Step 2: Deploy to Studionet**
 
-Run: `node scripts/deploy_bradbury.mjs deploy`
+Run: `node scripts/deploy_Studionet.mjs deploy`
 
-Expected: finalized deploy receipt with execution `SUCCESS`, Bradbury contract address, and schema read.
+Expected: finalized deploy receipt with execution `SUCCESS`, Studionet contract address, and schema read.
 
 - [ ] **Step 3: Run lifecycle demo**
 
-Run: `node scripts/deploy_bradbury.mjs demo`
+Run: `node scripts/deploy_Studionet.mjs demo`
 
 Expected: finalized activation, case opening, adjudication, credit withdrawal, and canonical reads showing `REVIEW_REQUIRED` and correct accounting.
 
@@ -534,8 +534,8 @@ Expected: no secret/internal files; `.env` ignored.
 - [ ] **Step 5: Commit evidence and docs**
 
 ```bash
-git add README.md docs/README.md docs/evidence/bradbury/deployment.json docs/evidence/bradbury/lifecycle.json
-git commit -m "docs: record Bradbury lifecycle evidence"
+git add README.md docs/README.md docs/evidence/Studionet/deployment.json docs/evidence/Studionet/lifecycle.json
+git commit -m "docs: record Studionet lifecycle evidence"
 ```
 
 - [ ] **Step 6: Push public GitHub repo**
@@ -548,4 +548,4 @@ Provide:
 - Title: `Dependency License Drift`
 - Description under 1000 characters with exact count
 - Evidence URL: public GitHub repo
-- Bradbury contract explorer URL
+- Studionet contract explorer URL

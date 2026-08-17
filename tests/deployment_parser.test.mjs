@@ -3,11 +3,11 @@ import test from "node:test";
 
 import {
   isAcceptedExplorerStatus,
-  isTransientBradburyError,
+  isTransientStudionetError,
   parseExecutionResult,
   parseTextReceiptFields,
   sanitizeReceipt,
-} from "../scripts/deploy_bradbury.mjs";
+} from "../scripts/deploy_studionet.mjs";
 
 test("parseExecutionResult reads raw Studio leader receipt shape", () => {
   const receipt = {
@@ -44,7 +44,7 @@ test("sanitizeReceipt keeps only public allowlisted fields", () => {
       stdout: "must not be saved",
       stderr: "must not be saved",
     },
-    { network: "testnet-bradbury", explorerBase: "https://explorer-bradbury.genlayer.com" },
+    { network: "studionet", explorerBase: "https://genlayer-explorer.vercel.app" },
   );
 
   assert.deepEqual(Object.keys(safe).sort(), [
@@ -55,7 +55,7 @@ test("sanitizeReceipt keeps only public allowlisted fields", () => {
     "txHash",
   ]);
   assert.equal(safe.executionResult, "SUCCESS");
-  assert.equal(safe.network, "testnet-bradbury");
+  assert.equal(safe.network, "studionet");
   assert.match(safe.explorerUrl, /0xabc/);
   assert.equal("node_config" in safe, false);
   assert.equal("stdout" in safe, false);
@@ -77,14 +77,14 @@ Contract Address: 0xdef0000000000000000000000000000000000001
   });
 });
 
-test("isTransientBradburyError identifies RPC capacity limits", () => {
+test("isTransientStudionetError identifies RPC capacity limits", () => {
   assert.equal(
-    isTransientBradburyError(
+    isTransientStudionetError(
       "transaction gas rate limit exceeded: node is at capacity, retry in ~521ms",
     ),
     true,
   );
-  assert.equal(isTransientBradburyError("GENLAYER_PRIVATE_KEY is missing"), false);
+  assert.equal(isTransientStudionetError("GENLAYER_PRIVATE_KEY is missing"), false);
 });
 
 test("isAcceptedExplorerStatus accepts accepted and finalized", () => {

@@ -6,4 +6,4 @@ Rules:
 
 - Keep only allowlisted public fields such as network, source commit/hash, contract address, transaction hash, execution result, schema summary, and explorer URL.
 - Do not store raw Studio receipts, traces, validator config, stdout, stderr, private keys, or `.env` values.
-- Studionet only: do not mix Bradbury, Asimov, or localnet addresses and receipts here.
+- Studionet only: do not mix other network addresses and receipts here.

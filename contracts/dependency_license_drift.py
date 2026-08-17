@@ -12,6 +12,7 @@ MAX_ID_LEN = 64
 MAX_PACKAGE_LEN = 214
 MAX_VERSION_LEN = 64
 MAX_PROFILE_LEN = 1200
+MAX_WEB_BODY_LEN = 200000
 
 STATUS_ACTIVE = "ACTIVE"
 STATUS_CLOSED = "CLOSED"
@@ -427,7 +428,7 @@ class DependencyLicenseDrift(gl.Contract):
                 text = response.body.decode("utf-8")
             except Exception:
                 text = str(response.body)
-            if len(text) > 24000:
+            if len(text) > MAX_WEB_BODY_LEN:
                 return ""
             return text
         except Exception:

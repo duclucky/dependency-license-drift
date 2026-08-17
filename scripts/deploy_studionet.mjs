@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(__filename), "..");
 const CONTRACT_PATH = path.join(ROOT, "contracts", "dependency_license_drift.py");
-const EVIDENCE_DIR = path.join(ROOT, "docs", "evidence", "bradbury");
+const EVIDENCE_DIR = path.join(ROOT, "docs", "evidence", "studionet");
 const DEPLOYMENT_PATH = path.join(EVIDENCE_DIR, "deployment.json");
 const LIFECYCLE_PATH = path.join(EVIDENCE_DIR, "lifecycle.json");
 const PRIVATE_KEY_NAMES = ["GENLAYER_PRIVATE_KEY", "STUDIONET_PRIVATE_KEY", "PRIVATE_KEY"];
@@ -20,12 +20,12 @@ const CHALLENGER_KEY_NAMES = [
 ];
 const GEN = 10n ** 18n;
 
-export const BRADBURY = {
-  network: "testnet-bradbury",
-  rpcUrl: "https://rpc-bradbury.genlayer.com",
-  chainId: "0x107d",
-  chainIdDecimal: 4221,
-  explorerBase: "https://explorer-bradbury.genlayer.com",
+export const STUDIONET = {
+  network: "studionet",
+  rpcUrl: "https://studio.genlayer.com/api",
+  chainId: "0xf22f",
+  chainIdDecimal: 61999,
+  explorerBase: "https://genlayer-explorer.vercel.app",
 };
 
 export function parseExecutionResult(receipt) {
@@ -75,7 +75,7 @@ export function parseTextReceiptFields(text) {
   return out;
 }
 
-export function isTransientBradburyError(error) {
+export function isTransientStudionetError(error) {
   const message = String(error?.message || error || "");
   return (
     message.includes("rate limit") ||
@@ -90,8 +90,8 @@ export function isAcceptedExplorerStatus(status) {
 }
 
 export function sanitizeReceipt(receipt, options = {}) {
-  const network = options.network || BRADBURY.network;
-  const explorerBase = options.explorerBase || BRADBURY.explorerBase;
+  const network = options.network || STUDIONET.network;
+  const explorerBase = options.explorerBase || STUDIONET.explorerBase;
   const txHash = parseTxHash(receipt);
   const contractAddress = parseContractAddress(receipt);
   const safe = {
@@ -139,18 +139,18 @@ export function loadSafeEnv() {
       break;
     }
   }
-  const effectiveNetwork = merged.GENLAYER_NETWORK || BRADBURY.network;
+  const effectiveNetwork = merged.GENLAYER_NETWORK || STUDIONET.network;
   return {
     network: effectiveNetwork,
     privateKeyPresent: Boolean(privateKey),
-    env: { ...merged, GENLAYER_NETWORK: BRADBURY.network, GENLAYER_PRIVATE_KEY: privateKey },
+    env: { ...merged, GENLAYER_NETWORK: STUDIONET.network, GENLAYER_PRIVATE_KEY: privateKey },
   };
 }
 
-function requireBradburyConfig() {
+function requireStudionetConfig() {
   const config = loadSafeEnv();
-  if (config.network !== BRADBURY.network) {
-    throw new Error("GENLAYER_NETWORK must be testnet-bradbury");
+  if (config.network !== STUDIONET.network) {
+    throw new Error("GENLAYER_NETWORK must be studionet");
   }
   if (!config.privateKeyPresent) {
     throw new Error("GENLAYER_PRIVATE_KEY is missing");
@@ -192,7 +192,7 @@ function sourceIdentity() {
 }
 
 async function rpcChainId() {
-  const response = await fetch(BRADBURY.rpcUrl, {
+  const response = await fetch(STUDIONET.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
@@ -256,45 +256,45 @@ async function inspect() {
   const config = loadSafeEnv();
   const chainId = await rpcChainId();
   const result = {
-    network: BRADBURY.network,
+    network: STUDIONET.network,
     configuredNetwork: config.network || "MISSING",
-    networkOk: config.network === BRADBURY.network,
+    networkOk: config.network === STUDIONET.network,
     privateKeyPresent: config.privateKeyPresent,
-    rpcUrl: BRADBURY.rpcUrl,
+    rpcUrl: STUDIONET.rpcUrl,
     chainId,
-    chainIdOk: chainId === BRADBURY.chainId,
-    explorer: BRADBURY.explorerBase,
+    chainIdOk: chainId === STUDIONET.chainId,
+    explorer: STUDIONET.explorerBase,
   };
   console.log(JSON.stringify(result, null, 2));
-  if (!result.networkOk) throw new Error("GENLAYER_NETWORK must be testnet-bradbury");
+  if (!result.networkOk) throw new Error("GENLAYER_NETWORK must be studionet");
   if (!result.privateKeyPresent) throw new Error("GENLAYER_PRIVATE_KEY is missing");
-  if (!result.chainIdOk) throw new Error("Bradbury chain id mismatch");
+  if (!result.chainIdOk) throw new Error("studionet chain id mismatch");
 }
 
 function deploy() {
-  const config = requireBradburyConfig();
+  const config = requireStudionetConfig();
   ensureEvidenceDir();
   let output = "";
   let lastError = null;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     try {
       output = runGenlayer(
-        ["deploy", "--contract", CONTRACT_PATH, "--rpc", BRADBURY.rpcUrl],
+        ["deploy", "--contract", CONTRACT_PATH, "--rpc", STUDIONET.rpcUrl],
         config.env,
       );
       break;
     } catch (error) {
       lastError = error;
-      if (!isTransientBradburyError(error)) throw error;
+      if (!isTransientStudionetError(error)) throw error;
       sleepSync(1000 + attempt * 1500);
     }
   }
   if (!output) throw lastError || new Error("deploy did not return output");
   const parsed = { ...parseJsonFromOutput(output), ...parseTextReceiptFields(output) };
   const safe = {
-    ...sanitizeReceipt(parsed, BRADBURY),
+    ...sanitizeReceipt(parsed, STUDIONET),
     ...sourceIdentity(),
-    network: BRADBURY.network,
+    network: STUDIONET.network,
   };
   if (!safe.executionResult) {
     safe.executionResult = "UNKNOWN";
@@ -304,12 +304,12 @@ function deploy() {
 }
 
 function schema() {
-  const config = requireBradburyConfig();
+  const config = requireStudionetConfig();
   if (!existsSync(DEPLOYMENT_PATH)) throw new Error("deployment.json is missing");
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_PATH, "utf8"));
   if (!deployment.contractAddress) throw new Error("contractAddress is missing");
   const output = runGenlayer(
-    ["schema", deployment.contractAddress, "--rpc", BRADBURY.rpcUrl],
+    ["schema", deployment.contractAddress, "--rpc", STUDIONET.rpcUrl],
     config.env,
   );
   console.log(output.trim());
@@ -327,7 +327,7 @@ function receiptSummary(hash, receipt) {
 }
 
 async function explorerTransactionSummary(hash) {
-  const response = await fetch(`${BRADBURY.explorerBase}/api/v1/transactions/${hash}`);
+  const response = await fetch(`${STUDIONET.explorerBase}/api/v1/transactions/${hash}`);
   if (!response.ok) {
     throw new Error(`explorer status ${response.status}`);
   }
@@ -360,8 +360,8 @@ async function waitAccepted(_client, hash) {
 
 function safeErrorMessage(error) {
   const message = String(error?.message || error || "");
-  if (isTransientBradburyError(error)) {
-    return "Bradbury RPC rate limited: node is at capacity";
+  if (isTransientStudionetError(error)) {
+    return "Studionet RPC rate limited: node is at capacity";
   }
   if (message.includes("insufficient funds")) {
     return "account has insufficient funds";
@@ -415,7 +415,7 @@ async function writeAccepted(client, address, functionName, args, value = 0n, op
     } catch (error) {
       lastError = error;
       const message = String(error?.message || error);
-      if (!isTransientBradburyError(message)) {
+      if (!isTransientStudionetError(message)) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 1500 + attempt * 1500));
@@ -431,27 +431,27 @@ async function readView(client, address, functionName, args = []) {
 }
 
 async function demo() {
-  const config = requireBradburyConfig();
+  const config = requireStudionetConfig();
   if (!existsSync(DEPLOYMENT_PATH)) throw new Error("deployment.json is missing");
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_PATH, "utf8"));
   if (!deployment.contractAddress) throw new Error("contractAddress is missing");
   const { createAccount, createClient } = await import("genlayer-js");
-  const { testnetBradbury } = await import("genlayer-js/chains");
+  const { studionet } = await import("genlayer-js/chains");
   const sponsor = createAccount(readPrivateKey(config.env, PRIVATE_KEY_NAMES));
   const challenger = createAccount(readPrivateKey(config.env, CHALLENGER_KEY_NAMES));
   const sponsorClient = createClient({
-    chain: testnetBradbury,
-    endpoint: BRADBURY.rpcUrl,
+    chain: studionet,
+    endpoint: STUDIONET.rpcUrl,
     account: sponsor,
   });
   const challengerClient = createClient({
-    chain: testnetBradbury,
-    endpoint: BRADBURY.rpcUrl,
+    chain: studionet,
+    endpoint: STUDIONET.rpcUrl,
     account: challenger,
   });
-  const reader = createClient({ chain: testnetBradbury, endpoint: BRADBURY.rpcUrl });
+  const reader = createClient({ chain: studionet, endpoint: STUDIONET.rpcUrl });
   const chainId = await reader.request({ method: "eth_chainId", params: [] });
-  if (chainId !== BRADBURY.chainId) throw new Error("Bradbury chain id mismatch");
+  if (chainId !== STUDIONET.chainId) throw new Error("studionet chain id mismatch");
 
   const existingLifecycle = loadResumableLifecycle(
     deployment.contractAddress,
@@ -465,7 +465,7 @@ async function demo() {
   const caseId = existingLifecycle?.caseId || `case-${suffix}`;
   const lifecycle =
     existingLifecycle || {
-      network: BRADBURY.network,
+      network: STUDIONET.network,
       status: "IN_PROGRESS",
       contractAddress: deployment.contractAddress,
       covenantId,
@@ -618,7 +618,7 @@ function verify() {
   if (!existsSync(DEPLOYMENT_PATH)) throw new Error("deployment.json is missing");
   const deployment = JSON.parse(readFileSync(DEPLOYMENT_PATH, "utf8"));
   const identity = sourceIdentity();
-  if (deployment.network !== BRADBURY.network) throw new Error("network mismatch");
+  if (deployment.network !== STUDIONET.network) throw new Error("network mismatch");
   if (deployment.sourceSha256 !== identity.sourceSha256) throw new Error("source hash mismatch");
   console.log(JSON.stringify({ ok: true, network: deployment.network, contractAddress: deployment.contractAddress || "" }, null, 2));
 }

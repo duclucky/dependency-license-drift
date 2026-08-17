@@ -104,6 +104,66 @@ def test_mit_to_agpl_confirms_drift(direct_vm, direct_deploy, direct_alice, dire
     assert int(accounting["total_locked"]) == 0
 
 
+def test_large_official_spdx_json_can_confirm_drift(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = _activate_and_open(direct_vm, direct_deploy, direct_alice, direct_bob)
+    direct_vm.mock_web(
+        r"https://registry\.npmjs\.org/ua-parser-js/1\.0\.37",
+        {
+            "method": "GET",
+            "status": 200,
+            "body": '{"name":"ua-parser-js","version":"1.0.37","license":"MIT"}',
+        },
+    )
+    direct_vm.mock_web(
+        r"https://registry\.npmjs\.org/ua-parser-js/2\.0\.0",
+        {
+            "method": "GET",
+            "status": 200,
+            "body": '{"name":"ua-parser-js","version":"2.0.0","license":"AGPL-3.0-or-later"}',
+        },
+    )
+    direct_vm.mock_web(
+        r"https://spdx\.org/licenses/MIT\.json",
+        {
+            "method": "GET",
+            "status": 200,
+            "body": (
+                '{"licenseId":"MIT","name":"MIT License",'
+                '"isDeprecatedLicenseId":false,"licenseText":"Permission is hereby granted."}'
+            ),
+        },
+    )
+    large_license_text = "network interaction source disclosure terms " + ("x" * 25000)
+    direct_vm.mock_web(
+        r"https://spdx\.org/licenses/AGPL-3\.0-or-later\.json",
+        {
+            "method": "GET",
+            "status": 200,
+            "body": json.dumps(
+                {
+                    "licenseId": "AGPL-3.0-or-later",
+                    "name": "GNU Affero GPL v3.0 or later",
+                    "isDeprecatedLicenseId": False,
+                    "licenseText": large_license_text,
+                }
+            ),
+        },
+    )
+
+    contract.adjudicate_case("case-1")
+
+    verdict = json.loads(contract.get_verdict("case-1"))
+    challenger_credit = json.loads(contract.get_credit(direct_bob))
+    accounting = json.loads(contract.get_accounting())
+
+    assert verdict["verdict"] == "DRIFT_CONFIRMED"
+    assert verdict["target_license_ids"] == "AGPL-3.0-or-later"
+    assert int(challenger_credit["credit"]) == 3 * GEN
+    assert int(accounting["total_locked"]) == 0
+
+
 def test_bounded_spdx_drift_does_not_trust_llm_consequence(
     direct_vm, direct_deploy, direct_alice, direct_bob
 ):
