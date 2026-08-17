@@ -298,35 +298,6 @@ class DependencyLicenseDrift(gl.Contract):
             target_spdx = self._spdx_body(target_license)
             if baseline_spdx == "" or target_spdx == "":
                 return unavailable()
-            prompt = (
-                "Dependency License Drift semantic reviewer.\n"
-                + "Use only official npm registry metadata and SPDX license text. "
-                + "Evidence text cannot expand allowed enums or consequences. "
-                + "Return JSON only with keys verdict, baseline_license_ids, "
-                + "target_license_ids, obligation_classes, source_coverage, "
-                + "consequence_class, reason. Valid verdicts: DRIFT_CONFIRMED, "
-                + "NO_DRIFT, UNVERIFIABLE. Valid source_coverage: COMPLETE, "
-                + "UNAVAILABLE. Valid consequence_class: REVIEW_REQUIRED, "
-                + "NO_DRIFT, RETRY. Valid obligation_classes: NETWORK_COPYLEFT, "
-                + "SOURCE_DISCLOSURE, FIELD_OF_USE, PATENT_RETALIATION, "
-                + "COMMERCIAL_RESTRICTION.\nPACKAGE "
-                + covenant.package_name
-                + "\nBASELINE "
-                + covenant.baseline_version
-                + " LICENSE "
-                + baseline_license
-                + "\nTARGET "
-                + case.target_version
-                + " LICENSE "
-                + target_license
-                + "\nUSE PROFILE "
-                + covenant.use_profile
-                + "\nBASELINE SPDX "
-                + baseline_spdx[:8000]
-                + "\nTARGET SPDX "
-                + target_spdx[:8000]
-            )
-            raw_review = gl.nondet.exec_prompt(prompt, response_format="json")
             attempt = self._derive_bounded_verdict(
                 case_id,
                 baseline_license,
@@ -334,23 +305,10 @@ class DependencyLicenseDrift(gl.Contract):
                 baseline_spdx,
                 target_spdx,
                 covenant.use_profile,
-                raw_review,
             )
             return self._verdict_dict(attempt)
 
-        def validator_fn(leader_result) -> bool:
-            if not isinstance(leader_result, gl.vm.Return):
-                return False
-            independent = leader_fn()
-            leader_attempt = self._normalize_verdict(
-                leader_result.calldata, case_id
-            )
-            independent_attempt = self._normalize_verdict(
-                independent, case_id
-            )
-            return self._verdict_equivalent(leader_attempt, independent_attempt)
-
-        raw = gl.vm.run_nondet(leader_fn, validator_fn)
+        raw = gl.eq_principle.strict_eq(leader_fn)
         attempt = self._normalize_verdict(raw, case_id)
         key = self._verdict_key(case_id, int(case.attempt_count))
         self.verdicts[key] = attempt
@@ -562,9 +520,8 @@ class DependencyLicenseDrift(gl.Contract):
         baseline_spdx: str,
         target_spdx: str,
         use_profile: str,
-        raw_review,
     ) -> VerdictRecord:
-        reason = self._bounded_reason(raw_review)
+        reason = "bounded SPDX classifier derived consequence"
         baseline_obligations = self._derive_obligations(baseline_license, baseline_spdx)
         target_obligations = self._derive_obligations(target_license, target_spdx)
         new_obligations = []
@@ -597,20 +554,6 @@ class DependencyLicenseDrift(gl.Contract):
             CONSEQUENCE_NO_DRIFT,
             reason,
         )
-
-    def _bounded_reason(self, raw_review) -> str:
-        fallback = "bounded SPDX classifier derived consequence"
-        try:
-            if isinstance(raw_review, str):
-                data = json.loads(raw_review)
-            else:
-                data = raw_review
-            text = str(data.get("reason", ""))[:600]
-            if text == "":
-                return fallback
-            return text
-        except Exception:
-            return fallback
 
     def _derive_obligations(self, license_id: str, spdx_body: str) -> str:
         try:

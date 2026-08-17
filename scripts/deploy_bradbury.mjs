@@ -84,6 +84,11 @@ export function isTransientBradburyError(error) {
   );
 }
 
+export function isAcceptedExplorerStatus(status) {
+  const value = String(status || "").toLowerCase();
+  return value === "accepted" || value === "finalized";
+}
+
 export function sanitizeReceipt(receipt, options = {}) {
   const network = options.network || BRADBURY.network;
   const explorerBase = options.explorerBase || BRADBURY.explorerBase;
@@ -243,6 +248,10 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function inspect() {
   const config = loadSafeEnv();
   const chainId = await rpcChainId();
@@ -317,14 +326,36 @@ function receiptSummary(hash, receipt) {
   };
 }
 
-async function waitAccepted(client, hash) {
-  return client.waitForTransactionReceipt({
-    hash,
-    status: "ACCEPTED",
-    interval: 5000,
-    retries: 120,
-    fullTransaction: true,
-  });
+async function explorerTransactionSummary(hash) {
+  const response = await fetch(`${BRADBURY.explorerBase}/api/v1/transactions/${hash}`);
+  if (!response.ok) {
+    throw new Error(`explorer status ${response.status}`);
+  }
+  const tx = await response.json();
+  return {
+    txHash: hash,
+    status: String(tx?.status || ""),
+    executionResult: String(tx?.execution_result || ""),
+    value: String(tx?.value || ""),
+    submitted: tx?.submission_timestamp || 0,
+    finalized: tx?.finalization_timestamp || 0,
+  };
+}
+
+async function waitAccepted(_client, hash) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    try {
+      const summary = await explorerTransactionSummary(hash);
+      if (isAcceptedExplorerStatus(summary.status)) {
+        return summary;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(5000);
+  }
+  throw lastError || new Error(`transaction ${hash} was not accepted`);
 }
 
 function safeErrorMessage(error) {
@@ -344,6 +375,31 @@ function safeErrorMessage(error) {
 function writeLifecycle(lifecycle) {
   ensureEvidenceDir();
   writeFileSync(LIFECYCLE_PATH, JSON.stringify(lifecycle, null, 2) + "\n");
+}
+
+function loadResumableLifecycle(contractAddress, sponsorAddress, challengerAddress) {
+  if (!existsSync(LIFECYCLE_PATH)) return null;
+  try {
+    const lifecycle = JSON.parse(readFileSync(LIFECYCLE_PATH, "utf8"));
+    if (String(lifecycle.contractAddress || "").toLowerCase() !== contractAddress.toLowerCase()) {
+      return null;
+    }
+    if (String(lifecycle.sponsor || "").toLowerCase() !== sponsorAddress.toLowerCase()) {
+      return null;
+    }
+    if (String(lifecycle.challenger || "").toLowerCase() !== challengerAddress.toLowerCase()) {
+      return null;
+    }
+    if (!["IN_PROGRESS", "FAILED_PARTIAL"].includes(String(lifecycle.status || ""))) {
+      return null;
+    }
+    lifecycle.status = "IN_PROGRESS";
+    lifecycle.txs = lifecycle.txs || {};
+    lifecycle.canonicalReads = lifecycle.canonicalReads || {};
+    return lifecycle;
+  } catch {
+    return null;
+  }
 }
 
 async function writeAccepted(client, address, functionName, args, value = 0n, options = {}) {
@@ -397,71 +453,106 @@ async function demo() {
   const chainId = await reader.request({ method: "eth_chainId", params: [] });
   if (chainId !== BRADBURY.chainId) throw new Error("Bradbury chain id mismatch");
 
-  const suffix = Date.now().toString(36);
-  const covenantId = `dld-${suffix}`;
-  const caseId = `case-${suffix}`;
-  const lifecycle = {
-    network: BRADBURY.network,
-    status: "IN_PROGRESS",
-    contractAddress: deployment.contractAddress,
-    covenantId,
-    caseId,
-    sponsor: sponsor.address,
-    challenger: challenger.address,
-    txs: {},
-    canonicalReads: {},
-    evidenceIsSanitized: true,
-  };
+  const existingLifecycle = loadResumableLifecycle(
+    deployment.contractAddress,
+    sponsor.address,
+    challenger.address,
+  );
+  const suffix = existingLifecycle?.covenantId
+    ? String(existingLifecycle.covenantId).replace(/^dld-/, "")
+    : Date.now().toString(36);
+  const covenantId = existingLifecycle?.covenantId || `dld-${suffix}`;
+  const caseId = existingLifecycle?.caseId || `case-${suffix}`;
+  const lifecycle =
+    existingLifecycle || {
+      network: BRADBURY.network,
+      status: "IN_PROGRESS",
+      contractAddress: deployment.contractAddress,
+      covenantId,
+      caseId,
+      sponsor: sponsor.address,
+      challenger: challenger.address,
+      txs: {},
+      canonicalReads: {},
+      evidenceIsSanitized: true,
+    };
   writeLifecycle(lifecycle);
   try {
-    lifecycle.txs.activate = await writeAccepted(
-      sponsorClient,
-      deployment.contractAddress,
-      "activate_covenant",
-      [
-        covenantId,
-        "ua-parser-js",
-        "1.0.37",
-        "Commercial SaaS may not accept AGPL or network-copyleft obligations.",
-        4102444800,
-      ],
-      2n * GEN,
-      {
-        onSubmitted(hash) {
-          lifecycle.txs.activate = { txHash: hash, status: "SUBMITTED" };
-          writeLifecycle(lifecycle);
-        },
-      },
-    );
-    writeLifecycle(lifecycle);
-    lifecycle.txs.openCase = await writeAccepted(
-      challengerClient,
-      deployment.contractAddress,
-      "open_case",
-      [covenantId, caseId, "2.0.0"],
-      1n * GEN,
-      {
-        onSubmitted(hash) {
-          lifecycle.txs.openCase = { txHash: hash, status: "SUBMITTED" };
-          writeLifecycle(lifecycle);
-        },
-      },
-    );
-    writeLifecycle(lifecycle);
-    lifecycle.txs.adjudicate = await writeAccepted(
-      sponsorClient,
-      deployment.contractAddress,
-      "adjudicate_case",
-      [caseId],
-      0n,
-      {
-        onSubmitted(hash) {
-          lifecycle.txs.adjudicate = { txHash: hash, status: "SUBMITTED" };
-          writeLifecycle(lifecycle);
-        },
-      },
-    );
-    writeLifecycle(lifecycle);
+    if (!isAcceptedExplorerStatus(lifecycle.txs.activate?.status)) {
+      if (lifecycle.txs.activate?.txHash) {
+        lifecycle.txs.activate = await waitAccepted(
+          sponsorClient,
+          lifecycle.txs.activate.txHash,
+        );
+      } else {
+        lifecycle.txs.activate = await writeAccepted(
+          sponsorClient,
+          deployment.contractAddress,
+          "activate_covenant",
+          [
+            covenantId,
+            "ua-parser-js",
+            "1.0.37",
+            "Commercial SaaS may not accept AGPL or network-copyleft obligations.",
+            4102444800,
+          ],
+          2n * GEN,
+          {
+            onSubmitted(hash) {
+              lifecycle.txs.activate = { txHash: hash, status: "SUBMITTED" };
+              writeLifecycle(lifecycle);
+            },
+          },
+        );
+      }
+      writeLifecycle(lifecycle);
+    }
+    if (!isAcceptedExplorerStatus(lifecycle.txs.openCase?.status)) {
+      if (lifecycle.txs.openCase?.txHash) {
+        lifecycle.txs.openCase = await waitAccepted(
+          challengerClient,
+          lifecycle.txs.openCase.txHash,
+        );
+      } else {
+        lifecycle.txs.openCase = await writeAccepted(
+          challengerClient,
+          deployment.contractAddress,
+          "open_case",
+          [covenantId, caseId, "2.0.0"],
+          1n * GEN,
+          {
+            onSubmitted(hash) {
+              lifecycle.txs.openCase = { txHash: hash, status: "SUBMITTED" };
+              writeLifecycle(lifecycle);
+            },
+          },
+        );
+      }
+      writeLifecycle(lifecycle);
+    }
+    if (!isAcceptedExplorerStatus(lifecycle.txs.adjudicate?.status)) {
+      if (lifecycle.txs.adjudicate?.txHash) {
+        lifecycle.txs.adjudicate = await waitAccepted(
+          sponsorClient,
+          lifecycle.txs.adjudicate.txHash,
+        );
+      } else {
+        lifecycle.txs.adjudicate = await writeAccepted(
+          sponsorClient,
+          deployment.contractAddress,
+          "adjudicate_case",
+          [caseId],
+          0n,
+          {
+            onSubmitted(hash) {
+              lifecycle.txs.adjudicate = { txHash: hash, status: "SUBMITTED" };
+              writeLifecycle(lifecycle);
+            },
+          },
+        );
+      }
+      writeLifecycle(lifecycle);
+    }
   } catch (error) {
     lifecycle.status = "FAILED_PARTIAL";
     lifecycle.safeError = safeErrorMessage(error);
@@ -481,19 +572,36 @@ async function demo() {
     "get_credit",
     [challenger.address],
   );
-  lifecycle.txs.withdraw = await writeAccepted(
-    challengerClient,
-    deployment.contractAddress,
-    "withdraw_credit",
-    [],
-    0n,
-    {
-      onSubmitted(hash) {
-        lifecycle.txs.withdraw = { txHash: hash, status: "SUBMITTED" };
-        writeLifecycle(lifecycle);
-      },
-    },
-  );
+  try {
+    if (!isAcceptedExplorerStatus(lifecycle.txs.withdraw?.status)) {
+      if (lifecycle.txs.withdraw?.txHash) {
+        lifecycle.txs.withdraw = await waitAccepted(
+          challengerClient,
+          lifecycle.txs.withdraw.txHash,
+        );
+      } else {
+        lifecycle.txs.withdraw = await writeAccepted(
+          challengerClient,
+          deployment.contractAddress,
+          "withdraw_credit",
+          [],
+          0n,
+          {
+            onSubmitted(hash) {
+              lifecycle.txs.withdraw = { txHash: hash, status: "SUBMITTED" };
+              writeLifecycle(lifecycle);
+            },
+          },
+        );
+      }
+      writeLifecycle(lifecycle);
+    }
+  } catch (error) {
+    lifecycle.status = "FAILED_PARTIAL";
+    lifecycle.safeError = safeErrorMessage(error);
+    writeLifecycle(lifecycle);
+    throw error;
+  }
   const accounting = await readView(reader, deployment.contractAddress, "get_accounting", []);
   lifecycle.status = "ACCEPTED_NOT_FINALIZED";
   lifecycle.canonicalReads = {

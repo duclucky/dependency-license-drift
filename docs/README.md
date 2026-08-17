@@ -95,7 +95,7 @@ Temporal entrypoint rules: covenant expiry uses half-open deadline semantics (`n
 | `activate_covenant` | Sponsor | New covenant ID | Existing covenant | `now < expiry`; equality late for activation | Duplicate ID rejects | Locks sponsor purse | `get_covenant`, `get_accounting` | zero value, duplicate, expired, wrong value |
 | `cancel_covenant` | Sponsor | `ACTIVE` with no active case | wrong caller, `CASE_OPEN`, terminal, `CLOSED` | N/A; sponsor recovery is state-gated | Second cancel rejects | Credits sponsor purse and removes locked amount | `get_covenant`, `get_credit`, `get_accounting` | wrong caller, active case, double cancel |
 | `open_case` | Challenger | `ACTIVE` | `CASE_OPEN`, terminal, `CLOSED` | `now < expiry`; stale state after expiry rejects | One active case per covenant | Locks challenge bond | `get_case`, `get_covenant` | wrong state, expired boundary, duplicate, zero bond |
-| `adjudicate_case` | Anyone | `CASE_OPEN`, `RETRYABLE` | terminal, closed | N/A; legality derives from state and source availability | Attempt ID append-only; settled case rejects | Opens credits or keeps locked on retry | `get_verdict`, `get_credit`, `get_status` | malicious leader, missing source, noisy LLM consequence, duplicate settle |
+| `adjudicate_case` | Anyone | `CASE_OPEN`, `RETRYABLE` | terminal, closed | N/A; legality derives from state and source availability | Attempt ID append-only; settled case rejects | Opens credits or keeps locked on retry | `get_verdict`, `get_credit`, `get_status` | source failure, bounded obligation mismatch, duplicate settle |
 | `withdraw_credit` | Credited address | Credit > 0 | No credit | N/A; credit ownership only | Zeroes before transfer; second call rejects | Transfers native GEN to caller | `get_credit`, `get_accounting` | wrong caller, double withdraw, transfer invariant |
 | `close_expired` | Sponsor | `ACTIVE` with no active case, or `RETRYABLE` | `CASE_OPEN`, terminal settled | `now >= expiry`; equality expired | Second close rejects | Credits remaining locked funds to sponsor | `get_covenant`, `get_credit` | wrong caller, expiry - 1, exact expiry, active case, double close |
 
@@ -120,11 +120,11 @@ Fact authentication matrix:
 | --- | --- | --- | --- | --- | --- | --- |
 | Package version license field | Package publisher can set metadata, but registry is authoritative for published version metadata | npm registry | Validator fetch from registry host/version path | Covenant/case binds package and versions | `RETRYABLE` if missing/malformed | claimant JSON with same fields cannot settle |
 | License text and canonical ID | SPDX project controls list | SPDX | Validator fetch exact SPDX JSON | Case binds observed license IDs | `RETRYABLE` if unsupported/deprecated | fake SPDX URL rejected |
-| Drift meaning | No actor may submit final verdict | GenLayer validators | Independent npm/SPDX replay plus contract-derived bounded obligation classifier; LLM text is non-consequential rationale | Attempt ID append-only | invalid source maps to retryable; noisy LLM cannot alter settlement | format-valid but meaning-invalid LLM output ignored |
+| Drift meaning | No actor may submit final verdict | GenLayer validators | Independent npm/SPDX replay plus contract-derived bounded obligation classifier | Attempt ID append-only | invalid source maps to retryable; actor evidence cannot alter settlement | official-source mismatch cannot settle |
 
 ## Consensus Design
 
-Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile; LLM output is retained only as non-consequential rationale so Bradbury validators do not disagree over free-form semantic wording.
+Leader task: fetch npm baseline metadata, target metadata, and SPDX license JSON/text for both normalized license IDs. The contract derives settlement fields from bounded SPDX obligation classes and the locked use profile. Bradbury revision 3 uses `gl.eq_principle.strict_eq` over the normalized settlement object after two accepted-not-finalized custom-validator revisions disagreed during adjudication.
 
 Consensus-critical fields:
 
@@ -134,9 +134,9 @@ Consensus-critical fields:
 | `obligation_classes` | bounded set | set equality | Explains material drift |
 | `baseline_license_ids` | bounded SPDX IDs | set equality | Source coverage |
 | `target_license_ids` | bounded SPDX IDs | set equality | Source coverage |
-| `consequence_class` | contract-derived | must match derived class | Prevents LLM-controlled payouts |
+| `consequence_class` | contract-derived | exact value in normalized object | Prevents actor-controlled payouts |
 
-Validator: re-fetches official evidence, derives the same bounded meaning fields, compares settlement fields only, and rejects non-`gl.vm.Return`. Extra or inconsistent LLM-provided IDs/classes are ignored because they are not settlement authority.
+Validator: re-fetches official evidence through `strict_eq`, derives the same bounded meaning fields, and requires exact equality on the normalized settlement object.
 
 ## Consequence And Accounting
 
@@ -161,7 +161,7 @@ Consumer/callback: none in v1; other builders consume views.
 | Threat | Attack | Mitigation | Test |
 | --- | --- | --- | --- |
 | Claimant-hosted fake evidence | Challenger submits JSON proving drift | Contract ignores claimant URLs; fetches only registry/SPDX | fake JSON cannot settle |
-| Format-valid malicious leader | Leader returns valid JSON but mismatched IDs | Settlement uses official npm/SPDX IDs and contract-derived consequence, not LLM-provided IDs | noisy LLM ignored |
+| Format-valid malicious source path | Actor tries to supply mismatched IDs or claimant JSON | Settlement uses only official npm/SPDX IDs and contract-derived consequence | claimant source ignored |
 | Prompt injection in license text | Text says ignore policy | Prompt treats evidence as data; allowed enums only | injection fixture |
 | Late case after expiry | Caller opens case with stale `ACTIVE` state | `open_case` checks timestamp directly | boundary tests |
 | Double withdrawal | Credited caller repeats withdraw | zero credit before transfer | duplicate withdraw test |
@@ -170,7 +170,7 @@ Consumer/callback: none in v1; other builders consume views.
 
 Happy path: MIT baseline to AGPL target opens `REVIEW_REQUIRED` and challenger credit.
 
-Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, active cancel recovery, no active case double settlement, fake source, unsupported license expression, missing SPDX, noisy LLM output, prompt injection, accounting unchanged on rejection, no double withdraw, retryable source failure.
+Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activation/open, active cancel recovery, no active case double settlement, fake source, unsupported license expression, missing SPDX, accounting unchanged on rejection, no double withdraw, retryable source failure.
 
 ## Claim-To-Code Matrix
 
@@ -190,7 +190,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 | Open Source License Cure Bond | Software/license domain | This is official package-version drift against a locked use profile, not generic cure or free-form dispute | Allowed with strict scope |
 | Semantic Interface Covenant | Software evidence and semantic compatibility | It judges interface behavior and quarantine; this judges registry/SPDX license obligations and review credit | Not duplicate |
 | Disclosure Dividend | OSS ecosystem and rewards | It apportions vulnerability reward among researchers; this resolves dependency license drift | Not duplicate |
-| Deterministic license scanner | npm/SPDX metadata | Scanner compares strings; contract adjudicates material semantic drift and settles value | Replacement PASS |
+| Deterministic license scanner | npm/SPDX metadata | Scanner compares strings offchain; contract binds official-source evidence, bounded obligation classes, state transitions, and value settlement onchain | Replacement PASS |
 
 ## Deployment And Evidence Plan
 
@@ -220,4 +220,4 @@ No legal advice; npm-only v1; SPDX expressions outside the supported grammar are
 
 ## Kill Criteria
 
-Kill or redesign if the verdict becomes deterministic string matching, if actor-hosted evidence can move funds, if the semantic validator checks only JSON shape, if npm/SPDX access fails on Bradbury without a retryable path, or if the design collapses into a generic license-dispute contract.
+Kill or redesign if actor-hosted evidence can move funds, if validators compare only JSON shape without official-source replay, if npm/SPDX access fails on Bradbury without a retryable path, or if the design collapses into a generic license-dispute contract.

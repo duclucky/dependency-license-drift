@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isAcceptedExplorerStatus,
   isTransientBradburyError,
   parseExecutionResult,
   parseTextReceiptFields,
@@ -84,4 +85,10 @@ test("isTransientBradburyError identifies RPC capacity limits", () => {
     true,
   );
   assert.equal(isTransientBradburyError("GENLAYER_PRIVATE_KEY is missing"), false);
+});
+
+test("isAcceptedExplorerStatus accepts accepted and finalized", () => {
+  assert.equal(isAcceptedExplorerStatus("accepted"), true);
+  assert.equal(isAcceptedExplorerStatus("finalized"), true);
+  assert.equal(isAcceptedExplorerStatus("revealing"), false);
 });
