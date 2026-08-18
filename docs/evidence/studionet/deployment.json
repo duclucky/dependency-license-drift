@@ -4,7 +4,7 @@
   "statusName": "FINALIZED",
   "resultName": "MAJORITY_AGREE",
   "txHash": "0xec79fa0ff73700def67bc36937b4e4d1a02fe5720fe983e2e5204f08cf71b764",
-  "explorerUrl": "https://genlayer-explorer.vercel.app/transactions/0xec79fa0ff73700def67bc36937b4e4d1a02fe5720fe983e2e5204f08cf71b764",
+  "explorerUrl": "https://explorer-studio.genlayer.com/tx/0xec79fa0ff73700def67bc36937b4e4d1a02fe5720fe983e2e5204f08cf71b764",
   "contractAddress": "0x13A27D41718a8a4ED445f8C4c708686e849748BE",
   "commit": "30acce29074176b89a9be9fc77b35f1aa334e2b2",
   "contractPath": "contracts/dependency_license_drift.py",

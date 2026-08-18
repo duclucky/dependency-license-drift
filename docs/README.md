@@ -16,7 +16,7 @@ Fund a dependency-use covenant, then let GenLayer validators decide whether an o
 
 ## Network Decision
 
-The active deployment target is `studionet`, matching workspace decision D1. Studionet CLI network info confirmed RPC `https://studio.genlayer.com/api`, chain id `61999`, currency `GEN`, and explorer `https://genlayer-explorer.vercel.app`. No other network evidence is part of the submission record.
+The active deployment target is `studionet`, matching workspace decision D1. Studionet CLI network info confirmed RPC `https://studio.genlayer.com/api`, chain id `61999`, currency `GEN`, and explorer `https://explorer-studio.genlayer.com`. No other network evidence is part of the submission record.
 
 ## Trust Problem
 
@@ -200,7 +200,7 @@ Negative coverage: unauthorized sponsor actions, duplicate IDs, expired activati
 - Network: `studionet`
 - GenLayer RPC: `https://studio.genlayer.com/api`
 - Chain ID: `61999`
-- Explorer: `https://genlayer-explorer.vercel.app`
+- Explorer: `https://explorer-studio.genlayer.com`
 - Funding: Studio account funding, not the public testnet faucet.
 - Actors/wallet separation: sponsor and challenger EOAs if value lifecycle needs adversarial separation.
 - Deploy steps: local check, safe config discovery, Studio account balance check, CLI deploy with `studionet`, schema read, lifecycle txs, receipts, canonical reads.

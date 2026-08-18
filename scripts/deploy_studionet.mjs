@@ -26,7 +26,7 @@ export const STUDIONET = {
   rpcUrl: "https://studio.genlayer.com/api",
   chainId: "0xf22f",
   chainIdDecimal: 61999,
-  explorerBase: "https://genlayer-explorer.vercel.app",
+  explorerBase: "https://explorer-studio.genlayer.com",
 };
 
 export function parseExecutionResult(receipt) {
@@ -101,7 +101,7 @@ export function sanitizeReceipt(receipt, options = {}) {
   };
   if (txHash) {
     safe.txHash = txHash;
-    safe.explorerUrl = `${explorerBase}/transactions/${txHash}`;
+    safe.explorerUrl = `${explorerBase}/tx/${txHash}`;
   }
   if (contractAddress) safe.contractAddress = contractAddress;
   return safe;
@@ -324,22 +324,6 @@ function receiptSummary(hash, receipt) {
     executionResult: String(
       receipt?.txExecutionResultName || receipt?.executionResult || receipt?.execution_result || "",
     ),
-  };
-}
-
-async function explorerTransactionSummary(hash) {
-  const response = await fetch(`${STUDIONET.explorerBase}/api/v1/transactions/${hash}`);
-  if (!response.ok) {
-    throw new Error(`explorer status ${response.status}`);
-  }
-  const tx = await response.json();
-  return {
-    txHash: hash,
-    status: String(tx?.status || ""),
-    executionResult: String(tx?.execution_result || ""),
-    value: String(tx?.value || ""),
-    submitted: tx?.submission_timestamp || 0,
-    finalized: tx?.finalization_timestamp || 0,
   };
 }
 

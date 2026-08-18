@@ -12,7 +12,7 @@
 
 - Contract-only Intelligent Contracts submission; no frontend and no Vercel.
 - Target network is `studionet`, overriding the workspace Studionet default for this project only.
-- Studionet RPC is `https://studio.genlayer.com/api`; chain id is `61999`; explorer is `https://genlayer-explorer.vercel.app`.
+- Studionet RPC is `https://studio.genlayer.com/api`; chain id is `61999`; explorer is `https://explorer-studio.genlayer.com`.
 - Contract file must be pure ASCII.
 - Contract header line 1 must match the current Studio pragma, line 2 is the `Depends` comment, and line 3 is `from genlayer import *`.
 - Exactly one project-specific `gl.Contract` subclass.

@@ -44,7 +44,7 @@ test("sanitizeReceipt keeps only public allowlisted fields", () => {
       stdout: "must not be saved",
       stderr: "must not be saved",
     },
-    { network: "studionet", explorerBase: "https://genlayer-explorer.vercel.app" },
+    { network: "studionet", explorerBase: "https://explorer-studio.genlayer.com" },
   );
 
   assert.deepEqual(Object.keys(safe).sort(), [
