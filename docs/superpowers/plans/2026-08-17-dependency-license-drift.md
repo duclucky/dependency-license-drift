@@ -514,7 +514,7 @@ Expected: finalized deploy receipt with execution `SUCCESS`, Studionet contract 
 
 - [ ] **Step 3: Run lifecycle demo**
 
-Run: `node scripts/deploy_Studionet.mjs demo`
+Run: `node scripts/deploy_studionet.mjs demo`
 
 Expected: finalized activation, case opening, adjudication, credit withdrawal, and canonical reads showing `REVIEW_REQUIRED` and correct accounting.
 
@@ -526,7 +526,7 @@ Run:
 git status --short
 git diff --check
 git ls-files
-rg -n "PRIVATE_KEY|BEGIN|SECRET|TOKEN|AGENTS|CLAUDE|MASTER-PROMPT|source-notes|\\.codex" .
+rg -n "<secret-or-internal-file-markers>" .
 ```
 
 Expected: no secret/internal files; `.env` ignored.
@@ -534,7 +534,7 @@ Expected: no secret/internal files; `.env` ignored.
 - [ ] **Step 5: Commit evidence and docs**
 
 ```bash
-git add README.md docs/README.md docs/evidence/Studionet/deployment.json docs/evidence/Studionet/lifecycle.json
+git add README.md docs/README.md docs/evidence/studionet/deployment.json docs/evidence/studionet/drift-payout.json docs/evidence/studionet/recovery.json
 git commit -m "docs: record Studionet lifecycle evidence"
 ```
 
