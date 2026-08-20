@@ -1,8 +1,10 @@
 # Dependency License Drift Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build, test, deploy, document, and submit a standalone GenLayer Intelligent Contract that adjudicates dependency license drift from official npm and SPDX evidence on Studionet.
+
+**Execution status:** Completed. Public repo pushed at `https://github.com/duclucky/dependency-license-drift`; Studionet deployment, clean retryable recovery, and accepted drift payout evidence are recorded under `docs/evidence/studionet/`.
 
 **Architecture:** One contract owns covenant funding, case state, semantic license-drift review, package status, and credits. Validators fetch npm registry metadata and SPDX license JSON/text, compare consensus-critical meaning fields, and deterministic settlement code derives status and credit consequences.
 
@@ -35,7 +37,7 @@
 - Consumes: planned contract path `contracts/dependency_license_drift.py`.
 - Produces: `npm run check`, static test functions, and ASCII/header verification relied on by all later tasks.
 
-- [ ] **Step 1: Write failing static tests**
+- [x] **Step 1: Write failing static tests**
 
 Create `tests/test_static_contract_rules.py`:
 
@@ -77,13 +79,13 @@ def test_no_claimant_evidence_settlement_terms() -> None:
     assert not any(term in src for term in forbidden)
 ```
 
-- [ ] **Step 2: Run test to verify it fails because the contract is absent**
+- [x] **Step 2: Run test to verify it fails because the contract is absent**
 
 Run: `pytest tests/test_static_contract_rules.py -q`
 
 Expected: FAIL with `FileNotFoundError` for `contracts/dependency_license_drift.py`.
 
-- [ ] **Step 3: Update check script to include static tests**
+- [x] **Step 3: Update check script to include static tests**
 
 Modify `scripts/check.ps1`:
 
@@ -102,13 +104,13 @@ gltest tests/direct
 Write-Host "CHECK_OK"
 ```
 
-- [ ] **Step 4: Run check to verify it fails at missing contract**
+- [x] **Step 4: Run check to verify it fails at missing contract**
 
 Run: `npm run check`
 
 Expected: FAIL with `contracts/dependency_license_drift.py is missing`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json scripts/ascii_header_check.py scripts/check.ps1 tests/test_static_contract_rules.py
@@ -126,7 +128,7 @@ git commit -m "test: add contract guardrail checks"
 - Produces contract methods: `activate_covenant`, `get_covenant`, `get_package_status`, `get_accounting`.
 - Later tasks consume the `Covenant` storage fields `sponsor`, `package_name`, `baseline_version`, `use_profile`, `expiry`, `status`, `purse`, and `active_case_id`.
 
-- [ ] **Step 1: Write failing direct tests for covenant activation**
+- [x] **Step 1: Write failing direct tests for covenant activation**
 
 Create `tests/direct/test_dependency_license_core.py`:
 
@@ -164,17 +166,17 @@ def test_activate_rejects_zero_value(contract, accounts):
 
 Include `import pytest` at the top.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `gltest tests/direct/test_dependency_license_core.py -q`
 
 Expected: FAIL because `activate_covenant` is not implemented.
 
-- [ ] **Step 3: Implement minimal contract core**
+- [x] **Step 3: Implement minimal contract core**
 
 Create `contracts/dependency_license_drift.py` with the current Studio header copied before coding. The first implementation must include ASCII-only dataclasses, one `DependencyLicenseDrift(gl.Contract)` class, `activate_covenant`, `get_covenant`, `get_package_status`, and `get_accounting`.
 
-- [ ] **Step 4: Run core tests and static tests**
+- [x] **Step 4: Run core tests and static tests**
 
 Run: `pytest tests/test_static_contract_rules.py -q`
 
@@ -184,7 +186,7 @@ Run: `gltest tests/direct/test_dependency_license_core.py -q`
 
 Expected: PASS for activation and zero-value rejection.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add contracts/dependency_license_drift.py tests/direct/test_dependency_license_core.py docs/README.md
@@ -201,7 +203,7 @@ git commit -m "feat: add covenant activation state"
 - Consumes: `activate_covenant`.
 - Produces: `open_case`, `close_expired`, `get_case`, `get_credit`.
 
-- [ ] **Step 1: Write failing tests for case opening and duplicate prevention**
+- [x] **Step 1: Write failing tests for case opening and duplicate prevention**
 
 Create `tests/direct/test_dependency_license_cases.py`:
 
@@ -236,17 +238,17 @@ def test_duplicate_active_case_rejects(contract, accounts):
         contract.connect(challenger).open_case(args=["cov-1", "case-2", "2.0.4"]).transact(value=1 * GEN)
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `gltest tests/direct/test_dependency_license_cases.py -q`
 
 Expected: FAIL because `open_case` and `get_case` are not implemented.
 
-- [ ] **Step 3: Implement case storage and direct guards**
+- [x] **Step 3: Implement case storage and direct guards**
 
 Add `Case` storage, `open_case`, `get_case`, and `get_credit`. Ensure `open_case` is payable, rejects zero value, rejects missing covenant, rejects non-`ACTIVE`, rejects duplicate active case, validates target version length, and checks `now < expiry` inside the entrypoint.
 
-- [ ] **Step 4: Add expiry/recovery tests**
+- [x] **Step 4: Add expiry/recovery tests**
 
 Extend `test_dependency_license_cases.py` with the direct-mode timestamp helper used by prior workspace contracts:
 
@@ -289,13 +291,13 @@ def test_close_expired_rejects_before_expiry_and_works_at_equality(contract, acc
     assert contract.get_package_status(args=["cov-close"]).call() == "CLOSED"
 ```
 
-- [ ] **Step 5: Run case tests**
+- [x] **Step 5: Run case tests**
 
 Run: `gltest tests/direct/test_dependency_license_cases.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add contracts/dependency_license_drift.py tests/direct/test_dependency_license_cases.py
@@ -312,7 +314,7 @@ git commit -m "feat: add case opening and recovery guards"
 - Consumes: `open_case`, `get_case`.
 - Produces: `adjudicate_case`, `get_verdict`, `get_package_status`, settlement credits.
 
-- [ ] **Step 1: Write failing happy-path adjudication test**
+- [x] **Step 1: Write failing happy-path adjudication test**
 
 Create `tests/direct/test_dependency_license_adjudication.py`:
 
@@ -355,13 +357,13 @@ def test_mit_to_agpl_confirms_drift(contract, accounts, client):
     assert int(contract.get_credit(args=[str(challenger.address)]).call()) > 0
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run: `gltest tests/direct/test_dependency_license_adjudication.py -q`
 
 Expected: FAIL because adjudication is not implemented.
 
-- [ ] **Step 3: Implement nondeterministic leader and meaning validator**
+- [x] **Step 3: Implement nondeterministic leader and meaning validator**
 
 Implement `adjudicate_case` with:
 - deterministic source URL construction for npm and SPDX only;
@@ -371,17 +373,17 @@ Implement `adjudicate_case` with:
 - validator returning `False` unless `leader_res` is `gl.vm.Return`;
 - validator comparing verdict, license ID sets, obligation class set, and complete source coverage.
 
-- [ ] **Step 4: Add malicious-output tests**
+- [x] **Step 4: Add malicious-output tests**
 
 Add tests for invalid enum, missing source coverage, extra license ID, format-valid but wrong target version, and `UNVERIFIABLE` leaving accounting unchanged.
 
-- [ ] **Step 5: Run adjudication tests**
+- [x] **Step 5: Run adjudication tests**
 
 Run: `gltest tests/direct/test_dependency_license_adjudication.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add contracts/dependency_license_drift.py tests/direct/test_dependency_license_adjudication.py
@@ -399,7 +401,7 @@ git commit -m "feat: add semantic license drift adjudication"
 - Consumes: credit ledger from adjudication.
 - Produces: `withdraw_credit` and complete accounting proof views.
 
-- [ ] **Step 1: Write failing withdrawal tests**
+- [x] **Step 1: Write failing withdrawal tests**
 
 Create `tests/direct/test_dependency_license_accounting.py`:
 
@@ -418,23 +420,23 @@ def test_accounting_view_has_zero_credit_for_unknown(contract, accounts):
     assert int(contract.get_credit(args=[str(user.address)]).call()) == 0
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `gltest tests/direct/test_dependency_license_accounting.py -q`
 
 Expected: FAIL until `withdraw_credit` and unknown-credit view behavior are complete.
 
-- [ ] **Step 3: Implement withdrawal**
+- [x] **Step 3: Implement withdrawal**
 
 Debit caller credit before transfer. Use the correct EOA/EVM transfer interface from `docs/08`; do not use nonexistent `gl.eth.send_value`. Ensure second withdrawal rejects and accounting cannot go negative.
 
-- [ ] **Step 4: Run full local checks**
+- [x] **Step 4: Run full local checks**
 
 Run: `npm run check`
 
 Expected: ASCII/header OK, `genvm-lint check` passes and recognizes `DependencyLicenseDrift`, static tests pass, direct tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add contracts/dependency_license_drift.py tests/direct/test_dependency_license_accounting.py docs/README.md
@@ -453,17 +455,17 @@ git commit -m "feat: add credit withdrawal accounting"
 - Consumes: verified contract and `.env` secret presence.
 - Produces: sanitized `deployment.json`, `lifecycle.json`, and explorer URLs.
 
-- [ ] **Step 1: Write parser fixture tests**
+- [x] **Step 1: Write parser fixture tests**
 
 Create `tests/deployment_parser.test.mjs` with fixtures for raw Studio-style `consensus_data.leader_receipt[].execution_result` and normalized SDK `txExecutionResultName`.
 
-- [ ] **Step 2: Run parser tests to verify failure**
+- [x] **Step 2: Run parser tests to verify failure**
 
 Run: `node --test tests/deployment_parser.test.mjs`
 
 Expected: FAIL because parser does not exist.
 
-- [ ] **Step 3: Implement deploy script**
+- [x] **Step 3: Implement deploy script**
 
 Create `scripts/deploy_Studionet.mjs` with commands:
 - `inspect`;
@@ -474,13 +476,13 @@ Create `scripts/deploy_Studionet.mjs` with commands:
 
 The script must read `.env` without printing values, require `GENLAYER_NETWORK=studionet`, refuse to resume a deployment whose network/source commit/header hash differs, and write only allowlisted evidence fields.
 
-- [ ] **Step 4: Run safe inspect**
+- [x] **Step 4: Run safe inspect**
 
 Run: `node scripts/deploy_Studionet.mjs inspect`
 
 Expected: reports Studionet RPC, chain id `61999`, wallet address presence, and balance presence without printing private key.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/deploy_Studionet.mjs tests/deployment_parser.test.mjs docs/evidence/Studionet/README.md package.json
@@ -500,25 +502,25 @@ git commit -m "feat: add Studionet deployment tooling"
 - Consumes: deploy script and verified local checks.
 - Produces: public evidence and copy-ready Portal fields.
 
-- [ ] **Step 1: Run pre-deploy local check**
+- [x] **Step 1: Run pre-deploy local check**
 
 Run: `npm run check`
 
 Expected: all checks pass.
 
-- [ ] **Step 2: Deploy to Studionet**
+- [x] **Step 2: Deploy to Studionet**
 
 Run: `node scripts/deploy_Studionet.mjs deploy`
 
 Expected: finalized deploy receipt with execution `SUCCESS`, Studionet contract address, and schema read.
 
-- [ ] **Step 3: Run lifecycle demo**
+- [x] **Step 3: Run lifecycle demo**
 
 Run: `node scripts/deploy_studionet.mjs demo`
 
 Expected: finalized activation, case opening, adjudication, credit withdrawal, and canonical reads showing `REVIEW_REQUIRED` and correct accounting.
 
-- [ ] **Step 4: Audit public tree**
+- [x] **Step 4: Audit public tree**
 
 Run:
 
@@ -531,18 +533,18 @@ rg -n "<secret-or-internal-file-markers>" .
 
 Expected: no secret/internal files; `.env` ignored.
 
-- [ ] **Step 5: Commit evidence and docs**
+- [x] **Step 5: Commit evidence and docs**
 
 ```bash
 git add README.md docs/README.md docs/evidence/studionet/deployment.json docs/evidence/studionet/drift-payout.json docs/evidence/studionet/recovery.json
 git commit -m "docs: record Studionet lifecycle evidence"
 ```
 
-- [ ] **Step 6: Push public GitHub repo**
+- [x] **Step 6: Push public GitHub repo**
 
 Create public repo `dependency-license-drift`, set `origin`, and push `main`. Verify remote URL and public tree before writing submission text.
 
-- [ ] **Step 7: Draft Portal fields**
+- [x] **Step 7: Draft Portal fields**
 
 Provide:
 - Title: `Dependency License Drift`
